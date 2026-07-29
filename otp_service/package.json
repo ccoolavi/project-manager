@@ -1,0 +1,19 @@
+{
+  "name": "otp-service",
+  "version": "1.0.0",
+  "description": "WhatsApp OTP verification service powered by Baileys and PocketBase integration",
+  "main": "wa-otp.js",
+  "type": "module",
+  "scripts": {
+    "start": "node wa-otp.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.9",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pino": "^9.1.0",
+    "pocketbase": "^0.21.3",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
