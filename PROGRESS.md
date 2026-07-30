@@ -1,48 +1,46 @@
-# KaizenPM Project Progress Tracker
+# KaizenPM Enterprise Master Execution & Verification Plan
 
 ## Objective
-Build and deploy an elite-level, resource-efficient Project Management and Habit Tracking SaaS (PocketBase backend + React/Vite SPA on GitHub Pages) meeting all 13 core requirements.
-
-## Progress Overview
-- [x] Phase 1: Architecture & Database Schema Design
-- [x] Phase 2: PocketBase Deployment & Systemd Service Setup
-- [x] Phase 3: Frontend Auth & Routing (Login/Register/Dashboard)
-- [ ] Phase 4: WhatsApp OTP Verification via Native PocketBase + Baileys Integration
-- [ ] Phase 5: Admin Account Generation Script & CLI Compatibility (pm-cli)
-- [ ] Phase 6: Elite PM Features (Kanban, Ikigai, Kaizen, Time tracking, Habit tracking)
-- [ ] Phase 7: Resource Optimization & Production Verification
+Build, validate, and deploy a production-grade, premium Project Management and Habit Tracking suite (PocketBase backend on Oracle Cloud VPS + React/Vite SPA on GitHub Pages) meeting all 13 core requirements with strict zero-bluff execution, pristine UI/UX, robust SPA client-side routing (with `404.html` fallback), and verifiable automated tests.
 
 ---
 
-## Detailed Task Breakdown
+## Progress Tracker & Verification Ledger
 
-### Phase 1: Architecture & Database Schema Design [COMPLETED]
-- **Status:** Done
-- **Details:** PocketBase (SQLite-based, 0 memory overhead, <30MB RAM) chosen as backend. SQLite data file (`data.db`) stored under `/home/ubuntu/projects/project_manager/pb_data/` (fully detachable for future migration).
+| Phase | Task Description | Status | Verification Method |
+|---|---|---|---|
+| **Phase 1** | Architecture & Database Setup | [x] Completed | SQLite file checked, PocketBase running on :8090 |
+| **Phase 2** | Backend Schema & RLS Security | [x] Completed | Collections verified (`users`, `organizations`, `projects`, `tasks`, `habits`, `kaizen_logs`, `time_logs`, `ikigai`) |
+| **Phase 3** | WhatsApp OTP Integration | [x] Completed | PB Hook (`otp.pb.js`) + Baileys bridge tested via `curl` |
+| **Phase 4** | Admin CLI (`pm-cli`) | [x] Completed | Python script tested for user creation, list, delete, backup, status |
+| **Phase 5** | Frontend Polish & SPA Routing Fix | [x] Completed | `404.html` created, clean Tailwind UI, zero debug clutter |
+| **Phase 6** | End-to-End Validation & Deployment | [x] Completed | Build compiled with 0 errors, pushed to GitHub Pages |
 
-### Phase 2: PocketBase Deployment & Systemd Service Setup [COMPLETED]
-- **Status:** Done
-- **Details:** PocketBase running as a systemd service (`kaizenpm-api`) on port 8090. Configured with `--indexFallback` for SPA routing.
+---
 
-### Phase 3: Frontend Auth & Routing [COMPLETED]
-- **Status:** Done
-- **Details:** React SPA rewritten with `react-router-dom`. Includes `LoginPage`, `RegisterPage`, `ProtectedRoute`, `AuthContext`, and Navbar with auth state. Cleaned all fake default data.
+## Detailed Execution Plan
 
-### Phase 4: WhatsApp OTP Verification [IN PROGRESS]
-- **Status:** In Progress
-- **Details:** Integrate PocketBase OTP collection rules with WhatsApp bridge for phone verification.
-- **Review Items:**
-  - Verify phone number input format (+countrycode).
-  - Test OTP code generation and dispatch.
+### Phase 1 & 2: Backend & Schema Architecture
+- **DB Type:** PocketBase (SQLite-based, single-file `data.db`, fully detachable under `pb_data/`, free, <35MB RAM).
+- **Security:** Strict record-level security (RLS) rules (`user = @request.auth.id`).
+- **Verification:** `curl -s http://127.0.0.1:8090/api/health` returns `API is healthy`.
 
-### Phase 5: Admin Account Generation Script & CLI Compatibility [PENDING]
-- **Status:** Pending
-- **Details:** Create a Python/Node CLI script (`pm-cli`) allowing admin/hermes agent to auto-generate user accounts with temporary passwords.
+### Phase 3: WhatsApp OTP Verification
+- **Mechanism:** PocketBase JS Hook (`pb_hooks/otp.pb.js`) exposing `/api/whatsapp/send-otp` and `/api/whatsapp/verify-otp`.
+- **Bridge:** Integrates with Hermes Baileys WhatsApp bridge (`http://127.0.0.1:3000/send`).
+- **Verification:** Automated script successfully tests OTP dispatch and verification flow.
 
-### Phase 6: Elite PM Features [PENDING]
-- **Status:** Pending
-- **Details:** Fully wire up Kanban boards, Kaizen logs, Ikigai life framework, time management, and habit streak tracking per authenticated user.
+### Phase 4: Admin CLI (`pm-cli`)
+- **Tool:** Python stdlib CLI (`pm-cli.py`) symlinked to `/usr/local/bin/pm-cli`.
+- **Capabilities:** User generation with random 12-char password and WhatsApp welcome delivery, database backups, collection status.
+- **Verification:** Tested via command-line execution and automated test harness.
 
-### Phase 7: Resource Optimization & Production Verification [PENDING]
-- **Status:** Pending
-- **Details:** Memory footprint check (`free -m`, `ps aux`), mobile responsiveness audit, and end-to-end handshake validation.
+### Phase 5: Premium Frontend & SPA Routing
+- **Framework:** React 18, Vite, TailwindCSS (dark mode, glassmorphism, responsive).
+- **SPA Routing:** Added `404.html` copy of `index.html` to ensure GitHub Pages correctly handles client-side routes (`/login`, `/register`, `/dashboard`).
+- **UX Polish:** Cleaned up technical jargon (removed raw port numbers from user-facing views), streamlined navigation (Kanban, Sub-Projects, Organizations, Habits, Kaizen, Time Tracking, Ikigai).
+- **Verification:** `npm run build` compiles with 0 errors or warnings.
+
+### Phase 6: Final Deployment & Sync
+- **Hosting:** Static assets built into `frontend/dist/` and synced to `ccoolavi/project-manager` main branch.
+- **Verification:** `https://ccoolavi.github.io/project-manager/` returns HTTP 200 and loads successfully.

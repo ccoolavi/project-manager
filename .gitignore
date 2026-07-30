@@ -3,7 +3,6 @@ node_modules/
 frontend/node_modules/
 
 # Build output
-frontend/dist/
 
 # Database files
 *.db
