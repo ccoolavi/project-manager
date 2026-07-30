@@ -18,7 +18,6 @@ import {
 } from './services/pocketbase';
 import { Building2 } from 'lucide-react';
 
-// ── Auth Context ───────────────────────────────────────────────
 const AuthContext = createContext(null);
 
 export function useAuth() {
@@ -74,7 +73,6 @@ function AuthProvider({ children }) {
   );
 }
 
-// ── Protected Route ────────────────────────────────────────────
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) {
@@ -91,32 +89,28 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
-// ── Dashboard (Authenticated Main App) ─────────────────────────
 function Dashboard() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
   const [activeTab, setActiveTab] = useState('kanban');
 
-  // Hierarchy States
   const [organizations, setOrganizations] = useState([]);
   const [selectedOrgId, setSelectedOrgId] = useState('');
   const [projects, setProjects] = useState([]);
   const [subProjects, setSubProjects] = useState([]);
 
-  // Core Data States
   const [tasks, setTasks] = useState([]);
   const [habits, setHabits] = useState([]);
   const [logs, setLogs] = useState([]);
   const [timeEntries, setTimeEntries] = useState([]);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
-  // Load data from PocketBase after auth
   useEffect(() => {
     let cancelled = false;
 
     async function loadAllData() {
-      setDataLoading(true);
+      setSyncing(true);
       try {
         const [orgsRes, projRes, subRes, tasksRes] = await Promise.all([
           pb.collection('organizations').getFullList({ requestKey: null }),
@@ -152,9 +146,9 @@ function Dashboard() {
           navigate('/login', { replace: true });
           return;
         }
-        console.warn('Failed to fetch data from PocketBase:', e);
+        console.warn('Sync warning:', e);
       } finally {
-        if (!cancelled) setDataLoading(false);
+        if (!cancelled) setSyncing(false);
       }
     }
 
@@ -176,7 +170,6 @@ function Dashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-brand-500 selection:text-white">
-      {/* Navigation Bar */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -187,9 +180,7 @@ function Dashboard() {
         setSelectedOrgId={setSelectedOrgId}
       />
 
-      {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Clean Enterprise Org Banner */}
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-slate-900/60 border border-slate-800 px-4 py-3 rounded-2xl backdrop-blur-sm">
           <div className="flex items-center space-x-3">
             {activeOrg ? (
@@ -205,18 +196,17 @@ function Dashboard() {
           </div>
 
           <div className="flex items-center space-x-3 text-slate-400">
-            {dataLoading && (
+            {syncing && (
               <div className="flex items-center space-x-2 text-brand-400">
                 <div className="w-3 h-3 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-                <span>Syncing...</span>
+                <span>Syncing with server...</span>
               </div>
             )}
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-slate-300 font-medium">Connected to Server</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span className="text-slate-300 font-medium">Connected</span>
           </div>
         </div>
 
-        {/* Tab Views */}
         {activeTab === 'kanban' && (
           <KanbanBoard
             tasks={tasks}
@@ -265,7 +255,6 @@ function Dashboard() {
         )}
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-slate-900 py-6 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <p>&copy; 2026 KaizenPM. Secure Enterprise Workspace.</p>
@@ -280,7 +269,6 @@ function Dashboard() {
   );
 }
 
-// ── Root App (HashRouter + Auth Provider) ──────────────────────────
 export default function App() {
   return (
     <AuthProvider>
