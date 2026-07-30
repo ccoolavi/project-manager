@@ -1,5 +1,5 @@
 import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import KanbanBoard from './components/KanbanBoard';
 import HabitTracker from './components/HabitTracker';
@@ -12,12 +12,11 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import {
   pb,
-  checkBackendHealth,
   isAuthenticated,
   getCurrentUser,
   logoutUser,
 } from './services/pocketbase';
-import { Database, Server, Building2 } from 'lucide-react';
+import { Building2 } from 'lucide-react';
 
 // ── Auth Context ───────────────────────────────────────────────
 const AuthContext = createContext(null);
@@ -34,14 +33,12 @@ function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check existing auth on mount
     if (isAuthenticated()) {
       setUser(getCurrentUser());
       setToken(pb.authStore.token);
     }
     setLoading(false);
 
-    // Listen for auth store changes (e.g. from other tabs)
     const unsubscribe = pb.authStore.onChange((newToken, model) => {
       setToken(newToken);
       setUser(model);
@@ -85,7 +82,7 @@ function ProtectedRoute({ children }) {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="flex items-center space-x-3 text-slate-400">
           <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm">Loading...</span>
+          <span className="text-sm">Loading workspace...</span>
         </div>
       </div>
     );
@@ -97,11 +94,9 @@ function ProtectedRoute({ children }) {
 // ── Dashboard (Authenticated Main App) ─────────────────────────
 function Dashboard() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { user, logout } = useAuth();
 
   const [activeTab, setActiveTab] = useState('kanban');
-  const [pbConnected, setPbConnected] = useState(false);
 
   // Hierarchy States
   const [organizations, setOrganizations] = useState([]);
@@ -114,18 +109,14 @@ function Dashboard() {
   const [habits, setHabits] = useState([]);
   const [logs, setLogs] = useState([]);
   const [timeEntries, setTimeEntries] = useState([]);
+  const [dataLoading, setDataLoading] = useState(true);
 
   // Load data from PocketBase after auth
   useEffect(() => {
     let cancelled = false;
 
     async function loadAllData() {
-      const isOnline = await checkBackendHealth();
-      if (cancelled) return;
-      setPbConnected(isOnline);
-
-      if (!isOnline) return;
-
+      setDataLoading(true);
       try {
         const [orgsRes, projRes, subRes, tasksRes] = await Promise.all([
           pb.collection('organizations').getFullList({ requestKey: null }),
@@ -144,7 +135,6 @@ function Dashboard() {
         if (subRes.length > 0) setSubProjects(subRes);
         if (tasksRes.length > 0) setTasks(tasksRes);
 
-        // Fetch optional collections (habits, logs, time_entries)
         const [h, l, timeData] = await Promise.all([
           pb.collection('habits').getFullList({ requestKey: null }).catch(() => []),
           pb.collection('kaizen_logs').getFullList({ requestKey: null }).catch(() => []),
@@ -158,18 +148,19 @@ function Dashboard() {
       } catch (e) {
         if (cancelled) return;
         if (e?.status === 401) {
-          // Token expired – logout and redirect to login
           logout();
           navigate('/login', { replace: true });
           return;
         }
         console.warn('Failed to fetch data from PocketBase:', e);
+      } finally {
+        if (!cancelled) setDataLoading(false);
       }
     }
 
     loadAllData();
     return () => { cancelled = true; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [logout, navigate]);
 
   const handleSetTasks = useCallback((updated) => setTasks(updated), []);
   const handleSetHabits = useCallback((updated) => setHabits(updated), []);
@@ -198,40 +189,30 @@ function Dashboard() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Connection & Active Org Status Banner */}
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-slate-900/40 border border-slate-800/80 px-4 py-2.5 rounded-xl">
+        {/* Clean Enterprise Org Banner */}
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-slate-900/60 border border-slate-800 px-4 py-3 rounded-2xl backdrop-blur-sm">
           <div className="flex items-center space-x-3">
-            <div className="flex items-center space-x-2">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  pbConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
-                }`}
-              />
-              <span className="text-slate-300 font-medium">
-                Backend:{' '}
-                <strong className={pbConnected ? 'text-emerald-400' : 'text-amber-400'}>
-                  {pbConnected ? 'PocketBase Active' : 'Offline'}
-                </strong>
-              </span>
-            </div>
-
-            {activeOrg && (
-              <div className="hidden sm:flex items-center space-x-1.5 px-2 py-0.5 rounded-md bg-brand-500/10 border border-brand-500/20 text-brand-300">
-                <Building2 className="w-3 h-3 text-brand-400" />
-                <span>Org: {activeOrg.name}</span>
+            {activeOrg ? (
+              <div className="flex items-center space-x-2 px-3 py-1 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-300 font-medium">
+                <Building2 className="w-3.5 h-3.5 text-brand-400" />
+                <span>Workspace: {activeOrg.name}</span>
+              </div>
+            ) : (
+              <div className="text-slate-400 font-medium">
+                No organization selected. Create one in the Organizations tab.
               </div>
             )}
           </div>
 
-          <div className="flex items-center space-x-4 text-slate-400">
-            <span className="flex items-center space-x-1">
-              <Server className="w-3.5 h-3.5 text-slate-500" />
-              <span>Port 8090</span>
-            </span>
-            <span className="flex items-center space-x-1">
-              <Database className="w-3.5 h-3.5 text-slate-500" />
-              <span>pb_data</span>
-            </span>
+          <div className="flex items-center space-x-3 text-slate-400">
+            {dataLoading && (
+              <div className="flex items-center space-x-2 text-brand-400">
+                <div className="w-3 h-3 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+                <span>Syncing...</span>
+              </div>
+            )}
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-slate-300 font-medium">Connected to Server</span>
           </div>
         </div>
 
@@ -287,13 +268,11 @@ function Dashboard() {
       {/* Footer */}
       <footer className="border-t border-slate-900 py-6 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p>&copy; 2026 KaizenPM. Multi-Organization & Hierarchy Management.</p>
+          <p>&copy; 2026 KaizenPM. Secure Enterprise Workspace.</p>
           <div className="flex items-center space-x-3 text-slate-400">
-            <span>React + Vite</span>
+            <span>Encrypted Cloud Sync</span>
             <span>&bull;</span>
-            <span>TailwindCSS</span>
-            <span>&bull;</span>
-            <span>PocketBase</span>
+            <span>Real-time DB</span>
           </div>
         </div>
       </footer>
@@ -301,24 +280,26 @@ function Dashboard() {
   );
 }
 
-// ── Root App (Router + Auth Provider) ──────────────────────────
+// ── Root App (HashRouter + Auth Provider) ──────────────────────────
 export default function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
+      <Router>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </Router>
     </AuthProvider>
   );
 }
