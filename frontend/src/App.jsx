@@ -1,132 +1,195 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import KanbanBoard from './components/KanbanBoard';
 import HabitTracker from './components/HabitTracker';
 import KaizenLog from './components/KaizenLog';
 import TimeManagement from './components/TimeManagement';
-import OtpVerification from './components/OtpVerification';
 import Organizations from './components/Organizations';
 import SubProjects from './components/SubProjects';
-import { 
-  TaskService, 
-  HabitService, 
-  KaizenService, 
-  TimeService, 
-  UserService,
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import {
+  pb,
   checkBackendHealth,
-  pb
+  isAuthenticated,
+  getCurrentUser,
+  logoutUser,
 } from './services/pocketbase';
 import { Database, Server, Building2 } from 'lucide-react';
 
-const DEFAULT_ORGS = [
-  { id: 'org_main', name: 'Kaizen Main Org', description: 'Primary engineering organization', owner: 'u_admin' },
-  { id: 'org_devops', name: 'DevOps & Cloud', description: 'Infrastructure and automation projects', owner: 'u_admin' }
-];
+// ── Auth Context ───────────────────────────────────────────────
+const AuthContext = createContext(null);
 
-const DEFAULT_PROJECTS = [
-  { id: 'proj_1', name: 'Project Manager Core', description: 'Main project management application', organization: 'org_main', status: 'active' },
-  { id: 'proj_2', name: 'WhatsApp Service', description: 'OTP verification gateway', organization: 'org_devops', status: 'active' }
-];
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
+  return ctx;
+}
 
-const DEFAULT_SUB_PROJECTS = [
-  { id: 'sp_1', name: 'Frontend React SPA', description: 'Vite & Tailwind UI components', project: 'proj_1', status: 'active' },
-  { id: 'sp_2', name: 'PocketBase Migration Schema', description: 'DB collections & hierarchy rules', project: 'proj_1', status: 'active' },
-  { id: 'sp_3', name: 'Baileys Client', description: 'Node.js Baileys integration', project: 'proj_2', status: 'active' }
-];
+function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-const DEFAULT_TASKS_HIERARCHICAL = [
-  { id: 't_1', title: 'Implement Organization Switcher in Navbar', sub_project: 'sp_1', priority: 'high', status: 'done', due_date: '2026-07-29', description: 'Dropdown filter for org context' },
-  { id: 't_2', title: 'Create 1700000001_organizations_schema.js', sub_project: 'sp_2', priority: 'urgent', status: 'done', due_date: '2026-07-29', description: 'PocketBase JS migration' },
-  { id: 't_3', title: 'CLI command: create-org and list-orgs', sub_project: 'sp_1', priority: 'high', status: 'in_progress', due_date: '2026-07-30', description: 'Python CLI pm-cli integration' }
-];
+  useEffect(() => {
+    // Check existing auth on mount
+    if (isAuthenticated()) {
+      setUser(getCurrentUser());
+      setToken(pb.authStore.token);
+    }
+    setLoading(false);
 
-export default function App() {
+    // Listen for auth store changes (e.g. from other tabs)
+    const unsubscribe = pb.authStore.onChange((newToken, model) => {
+      setToken(newToken);
+      setUser(model);
+    });
+    return unsubscribe;
+  }, []);
+
+  const login = useCallback(async (email, password) => {
+    const authData = await pb.collection('users').authWithPassword(email, password);
+    setUser(authData.record || authData.model);
+    setToken(pb.authStore.token);
+    return authData;
+  }, []);
+
+  const register = useCallback(async (data) => {
+    const record = await pb.collection('users').create(data);
+    const authData = await pb.collection('users').authWithPassword(data.email, data.password);
+    setUser(authData.record || authData.model);
+    setToken(pb.authStore.token);
+    return record;
+  }, []);
+
+  const logout = useCallback(() => {
+    logoutUser();
+    setUser(null);
+    setToken(null);
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+// ── Protected Route ────────────────────────────────────────────
+function ProtectedRoute({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="flex items-center space-x-3 text-slate-400">
+          <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm">Loading...</span>
+        </div>
+      </div>
+    );
+  }
+  if (!user) return <Navigate to="/login" replace />;
+  return children;
+}
+
+// ── Dashboard (Authenticated Main App) ─────────────────────────
+function Dashboard() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user, logout } = useAuth();
+
   const [activeTab, setActiveTab] = useState('kanban');
-  const [isOtpOpen, setIsOtpOpen] = useState(false);
   const [pbConnected, setPbConnected] = useState(false);
 
   // Hierarchy States
-  const [organizations, setOrganizations] = useState(DEFAULT_ORGS);
-  const [selectedOrgId, setSelectedOrgId] = useState('org_main');
-  const [projects, setProjects] = useState(DEFAULT_PROJECTS);
-  const [subProjects, setSubProjects] = useState(DEFAULT_SUB_PROJECTS);
+  const [organizations, setOrganizations] = useState([]);
+  const [selectedOrgId, setSelectedOrgId] = useState('');
+  const [projects, setProjects] = useState([]);
+  const [subProjects, setSubProjects] = useState([]);
 
   // Core Data States
-  const [tasks, setTasks] = useState(DEFAULT_TASKS_HIERARCHICAL);
+  const [tasks, setTasks] = useState([]);
   const [habits, setHabits] = useState([]);
   const [logs, setLogs] = useState([]);
   const [timeEntries, setTimeEntries] = useState([]);
-  const [user, setUser] = useState(UserService.getUser());
 
-  // Load initial data from PocketBase or fallback
+  // Load data from PocketBase after auth
   useEffect(() => {
+    let cancelled = false;
+
     async function loadAllData() {
       const isOnline = await checkBackendHealth();
+      if (cancelled) return;
       setPbConnected(isOnline);
 
-      if (isOnline) {
-        try {
-          const orgsRes = await pb.collection('organizations').getFullList();
-          if (orgsRes.length > 0) {
-            setOrganizations(orgsRes);
-            setSelectedOrgId(orgsRes[0].id);
-          }
+      if (!isOnline) return;
 
-          const projRes = await pb.collection('projects').getFullList();
-          if (projRes.length > 0) setProjects(projRes);
+      try {
+        const [orgsRes, projRes, subRes, tasksRes] = await Promise.all([
+          pb.collection('organizations').getFullList({ requestKey: null }),
+          pb.collection('projects').getFullList({ requestKey: null }),
+          pb.collection('sub_projects').getFullList({ requestKey: null }),
+          pb.collection('tasks').getFullList({ requestKey: null }),
+        ]);
 
-          const subRes = await pb.collection('sub_projects').getFullList();
-          if (subRes.length > 0) setSubProjects(subRes);
+        if (cancelled) return;
 
-          const tasksRes = await pb.collection('tasks').getFullList();
-          if (tasksRes.length > 0) setTasks(tasksRes);
-        } catch (e) {
-          console.warn('PB fetch error, falling back to local state:', e);
+        if (orgsRes.length > 0) {
+          setOrganizations(orgsRes);
+          setSelectedOrgId((prev) => prev || orgsRes[0].id);
         }
+        if (projRes.length > 0) setProjects(projRes);
+        if (subRes.length > 0) setSubProjects(subRes);
+        if (tasksRes.length > 0) setTasks(tasksRes);
+
+        // Fetch optional collections (habits, logs, time_entries)
+        const [h, l, timeData] = await Promise.all([
+          pb.collection('habits').getFullList({ requestKey: null }).catch(() => []),
+          pb.collection('kaizen_logs').getFullList({ requestKey: null }).catch(() => []),
+          pb.collection('time_entries').getFullList({ requestKey: null }).catch(() => []),
+        ]);
+
+        if (cancelled) return;
+        setHabits(h || []);
+        setLogs(l || []);
+        setTimeEntries(timeData || []);
+      } catch (e) {
+        if (cancelled) return;
+        if (e?.status === 401) {
+          // Token expired – logout and redirect to login
+          logout();
+          navigate('/login', { replace: true });
+          return;
+        }
+        console.warn('Failed to fetch data from PocketBase:', e);
       }
-
-      const [h, l, timeData] = await Promise.all([
-        HabitService.getAll(),
-        KaizenService.getAll(),
-        TimeService.getAll()
-      ]);
-
-      setHabits(h);
-      setLogs(l);
-      setTimeEntries(timeData);
     }
+
     loadAllData();
-  }, []);
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSetTasks = (updated) => {
-    setTasks(updated);
-  };
+  const handleSetTasks = useCallback((updated) => setTasks(updated), []);
+  const handleSetHabits = useCallback((updated) => setHabits(updated), []);
+  const handleSetLogs = useCallback((updated) => setLogs(updated), []);
+  const handleSetTimeEntries = useCallback((updated) => setTimeEntries(updated), []);
 
-  const handleSetHabits = (updated) => {
-    setHabits(updated);
-    HabitService.saveAll(updated);
-  };
+  const activeOrg = organizations.find((o) => o.id === selectedOrgId) || organizations[0];
 
-  const handleSetLogs = (updated) => {
-    setLogs(updated);
-    KaizenService.saveAll(updated);
-  };
-
-  const handleSetTimeEntries = (updated) => {
-    setTimeEntries(updated);
-    TimeService.saveAll(updated);
-  };
-
-  const activeOrg = organizations.find(o => o.id === selectedOrgId) || organizations[0];
+  const handleLogout = useCallback(() => {
+    logout();
+    navigate('/login', { replace: true });
+  }, [logout, navigate]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-brand-500 selection:text-white">
-      {/* Navigation Bar with Org Switcher */}
+      {/* Navigation Bar */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         user={user}
-        onOpenOtpModal={() => setIsOtpOpen(true)}
+        onLogout={handleLogout}
         organizations={organizations}
         selectedOrgId={selectedOrgId}
         setSelectedOrgId={setSelectedOrgId}
@@ -134,15 +197,19 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        
         {/* Connection & Active Org Status Banner */}
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-slate-900/40 border border-slate-800/80 px-4 py-2.5 rounded-xl">
           <div className="flex items-center space-x-3">
             <div className="flex items-center space-x-2">
-              <span className={`w-2 h-2 rounded-full ${pbConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  pbConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                }`}
+              />
               <span className="text-slate-300 font-medium">
-                Backend: <strong className={pbConnected ? 'text-emerald-400' : 'text-amber-400'}>
-                  {pbConnected ? 'PocketBase Active' : 'Offline / Standalone'}
+                Backend:{' '}
+                <strong className={pbConnected ? 'text-emerald-400' : 'text-amber-400'}>
+                  {pbConnected ? 'PocketBase Active' : 'Offline'}
                 </strong>
               </span>
             </div>
@@ -169,9 +236,9 @@ export default function App() {
 
         {/* Tab Views */}
         {activeTab === 'kanban' && (
-          <KanbanBoard 
-            tasks={tasks} 
-            setTasks={handleSetTasks} 
+          <KanbanBoard
+            tasks={tasks}
+            setTasks={handleSetTasks}
             subProjects={subProjects}
             projects={projects}
             selectedOrgId={selectedOrgId}
@@ -180,7 +247,7 @@ export default function App() {
         )}
 
         {activeTab === 'sub_projects' && (
-          <SubProjects 
+          <SubProjects
             subProjects={subProjects}
             setSubProjects={setSubProjects}
             projects={projects}
@@ -210,7 +277,6 @@ export default function App() {
         {activeTab === 'time' && (
           <TimeManagement timeEntries={timeEntries} setTimeEntries={handleSetTimeEntries} />
         )}
-
       </main>
 
       {/* Footer */}
@@ -226,14 +292,28 @@ export default function App() {
           </div>
         </div>
       </footer>
-
-      {/* WhatsApp OTP Verification Modal */}
-      <OtpVerification
-        isOpen={isOtpOpen}
-        onClose={() => setIsOtpOpen(false)}
-        user={user}
-        setUser={setUser}
-      />
     </div>
+  );
+}
+
+// ── Root App (Router + Auth Provider) ──────────────────────────
+export default function App() {
+  return (
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </AuthProvider>
   );
 }

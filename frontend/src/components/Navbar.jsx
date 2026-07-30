@@ -4,19 +4,18 @@ import {
   CheckSquare, 
   TrendingUp, 
   Clock, 
-  ShieldCheck, 
-  ShieldAlert, 
   Building2,
   Layers,
   Zap,
-  ChevronDown
+  LogOut,
+  User as UserIcon
 } from 'lucide-react';
 
 export default function Navbar({ 
   activeTab, 
   setActiveTab, 
   user, 
-  onOpenOtpModal, 
+  onLogout,
   organizations = [], 
   selectedOrgId, 
   setSelectedOrgId 
@@ -29,6 +28,8 @@ export default function Navbar({
     { id: 'kaizen', label: 'Kaizen Log', icon: TrendingUp },
     { id: 'time', label: 'Time Dashboard', icon: Clock },
   ];
+
+  const displayName = user?.name || user?.email || user?.username || 'User';
 
   return (
     <header className="sticky top-0 z-40 bg-slate-900/80 backdrop-blur-md border-b border-slate-800">
@@ -91,27 +92,19 @@ export default function Navbar({
             })}
           </nav>
 
-          {/* User & Verification status */}
+          {/* User & Logout */}
           <div className="flex items-center space-x-3">
+            <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50 text-xs text-slate-300">
+              <UserIcon className="w-3.5 h-3.5 text-brand-400" />
+              <span className="max-w-[100px] truncate">{displayName}</span>
+            </div>
             <button
-              onClick={onOpenOtpModal}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                user.verified
-                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
-                  : 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20 shadow-glow-amber animate-pulse'
-              }`}
+              onClick={onLogout}
+              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-rose-300 hover:bg-rose-500/10 border border-slate-700/50 hover:border-rose-500/30 transition-all"
+              title="Sign out"
             >
-              {user.verified ? (
-                <>
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span className="hidden sm:inline">WA Verified</span>
-                </>
-              ) : (
-                <>
-                  <ShieldAlert className="w-4 h-4 text-amber-400" />
-                  <span className="hidden sm:inline">Verify OTP</span>
-                </>
-              )}
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Sign Out</span>
             </button>
           </div>
         </div>

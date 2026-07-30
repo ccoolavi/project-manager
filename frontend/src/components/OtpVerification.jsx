@@ -10,7 +10,7 @@ import {
   Loader2,
   Lock
 } from 'lucide-react';
-import { UserService } from '../services/pocketbase';
+import { sendWhatsAppOTP, verifyWhatsAppOTP } from '../services/pocketbase';
 
 export default function OtpVerification({ isOpen, onClose, user, setUser }) {
   const [step, setStep] = useState(user.verified ? 'verified' : 'phone'); // 'phone', 'otp', 'verified'
@@ -34,7 +34,7 @@ export default function OtpVerification({ isOpen, onClose, user, setUser }) {
     setMessage('');
 
     try {
-      const res = await UserService.sendWhatsAppOTP(phone);
+      const res = await sendWhatsAppOTP(phone);
       setLoading(false);
       setMessage(res.message || '6-digit OTP sent to your WhatsApp!');
       setStep('otp');
@@ -55,7 +55,7 @@ export default function OtpVerification({ isOpen, onClose, user, setUser }) {
     setError('');
 
     try {
-      const isVerified = await UserService.verifyWhatsAppOTP(phone, otpCode);
+      const isVerified = await verifyWhatsAppOTP(phone, otpCode);
       setLoading(false);
 
       if (isVerified) {
@@ -64,7 +64,6 @@ export default function OtpVerification({ isOpen, onClose, user, setUser }) {
           phone: phone,
           verified: true
         };
-        UserService.saveUser(updatedUser);
         setUser(updatedUser);
         setStep('verified');
       } else {
