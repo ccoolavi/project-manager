@@ -1,0 +1,14 @@
+[Unit]
+Description=PocketBase API Server for KaizenPM
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/projects/project_manager
+ExecStart=/home/ubuntu/projects/project_manager/pocketbase serve --http="0.0.0.0:8090" --publicDir="/home/ubuntu/projects/project_manager/frontend/dist" --indexFallback
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

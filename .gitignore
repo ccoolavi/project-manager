@@ -7,6 +7,8 @@ frontend/dist/
 
 # Database files
 *.db
+*.db-shm
+*.db-wal
 pb_data/*.db
 
 # Runtime binaries
