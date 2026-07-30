@@ -8,7 +8,7 @@ export const pb = new PocketBase(PB_URL);
 
 // OTP service URL — derived from PB_URL by replacing port 8090 with 3002
 // The WhatsApp OTP gateway runs as a separate Node.js Express service
-const OTP_URL = PB_URL.replace(':8090', ':3002');
+const OTP_URL = PB_URL.replace(':8090', ':3003');
 
 // Helper to check if PocketBase server is reachable
 export async function checkBackendHealth() {
