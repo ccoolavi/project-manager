@@ -40,7 +40,7 @@ export default function OtpVerification({ isOpen, onClose, user, setUser }) {
       setStep('otp');
     } catch (err) {
       setLoading(false);
-      setError('Failed to send WhatsApp OTP. Please ensure server script is running.');
+      setError(err.message || 'Failed to send WhatsApp OTP.');
     }
   };
 
@@ -67,11 +67,11 @@ export default function OtpVerification({ isOpen, onClose, user, setUser }) {
         setUser(updatedUser);
         setStep('verified');
       } else {
-        setError('Invalid OTP code. Try entering 123456 in simulation mode.');
+        setError('Invalid OTP code. Please try again.');
       }
     } catch (err) {
       setLoading(false);
-      setError('Verification error. Please try again.');
+      setError(err.message || 'Verification error. Please try again.');
     }
   };
 

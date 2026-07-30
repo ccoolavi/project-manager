@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layers, Plus, Edit2, Trash2, FolderKanban } from 'lucide-react';
+import { Layers, Plus, Edit2, Trash2, FolderKanban, Loader2 } from 'lucide-react';
 import { pb } from '../services/pocketbase';
 
 export default function SubProjects({ subProjects, setSubProjects, projects, selectedOrgId, user }) {
@@ -13,6 +13,7 @@ export default function SubProjects({ subProjects, setSubProjects, projects, sel
   const [description, setDescription] = useState('');
   const [projectId, setProjectId] = useState(filteredProjects[0]?.id || '');
   const [status, setStatus] = useState('active');
+  const [loading, setLoading] = useState(new Set());
 
   const filteredSubProjects = subProjects.filter(sp => {
     const projectMatch = selectedProjectId === 'all' || sp.project === selectedProjectId;
@@ -42,24 +43,31 @@ export default function SubProjects({ subProjects, setSubProjects, projects, sel
     e.preventDefault();
     if (!name.trim()) return;
 
+    setLoading(prev => new Set([...prev, editId ? `edit-${editId}` : 'create']));
+
     if (editId) {
-      const updated = subProjects.map(sp => sp.id === editId ? { ...sp, name, description, project: projectId, status } : sp);
+      // Update
+      const updated = subProjects.map(sp => sp.id === editId ? { ...sp, name: name.trim(), description: description.trim(), project: projectId, status } : sp);
       setSubProjects(updated);
       try {
         if (pb.authStore.isValid) {
-          await pb.collection('sub_projects').update(editId, { name, description, project: projectId, status });
+          await pb.collection('sub_projects').update(editId, {
+            name: name.trim(),
+            description: description.trim(),
+            project: projectId,
+            status
+          });
         }
-      } catch (e) {}
+      } catch (err) {
+        if (err?.status === 401) {
+          pb.authStore.clear();
+          window.location.href = '/login';
+          return;
+        }
+        console.warn('Failed to update sub-project:', err);
+      }
     } else {
-      const newSp = {
-        id: 'sp_' + Date.now(),
-        name: name.trim(),
-        description: description.trim(),
-        project: projectId || (filteredProjects[0]?.id || 'proj_1'),
-        status,
-        user: user.id || 'u_admin'
-      };
-      setSubProjects([...subProjects, newSp]);
+      // Create
       try {
         if (pb.authStore.isValid) {
           const created = await pb.collection('sub_projects').create({
@@ -67,12 +75,35 @@ export default function SubProjects({ subProjects, setSubProjects, projects, sel
             description: description.trim(),
             project: projectId,
             status,
-            user: pb.authStore.model?.id || user.id
+            user: pb.authStore.model?.id || user?.id
           });
-          setSubProjects([...subProjects.filter(s => s.id !== newSp.id), created]);
+          setSubProjects([...subProjects, created]);
+        } else {
+          // Offline fallback
+          setSubProjects([...subProjects, {
+            id: 'sp_' + Date.now(),
+            name: name.trim(),
+            description: description.trim(),
+            project: projectId,
+            status,
+            user: user?.id
+          }]);
         }
-      } catch (e) {}
+      } catch (err) {
+        if (err?.status === 401) {
+          pb.authStore.clear();
+          window.location.href = '/login';
+          return;
+        }
+        console.warn('Failed to create sub-project:', err);
+      }
     }
+
+    setLoading(prev => {
+      const next = new Set(prev);
+      next.delete(editId ? `edit-${editId}` : 'create');
+      return next;
+    });
     setName('');
     setDescription('');
     setEditId(null);
@@ -80,12 +111,29 @@ export default function SubProjects({ subProjects, setSubProjects, projects, sel
   };
 
   const handleDelete = async (id) => {
+    setLoading(prev => new Set([...prev, `delete-${id}`]));
+    const prevItems = [...subProjects];
     setSubProjects(subProjects.filter(sp => sp.id !== id));
+
     try {
       if (pb.authStore.isValid) {
         await pb.collection('sub_projects').delete(id);
       }
-    } catch (e) {}
+    } catch (err) {
+      setSubProjects(prevItems);
+      if (err?.status === 401) {
+        pb.authStore.clear();
+        window.location.href = '/login';
+        return;
+      }
+      console.warn('Failed to delete sub-project:', err);
+    } finally {
+      setLoading(prev => {
+        const next = new Set(prev);
+        next.delete(`delete-${id}`);
+        return next;
+      });
+    }
   };
 
   const getStatusBadge = (st) => {
@@ -127,9 +175,14 @@ export default function SubProjects({ subProjects, setSubProjects, projects, sel
 
           <button
             onClick={handleOpenCreate}
-            className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-medium text-sm shadow-glow transition-all"
+            disabled={loading.has('create')}
+            className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-medium text-sm shadow-glow transition-all disabled:opacity-50"
           >
-            <Plus className="w-4 h-4" />
+            {loading.has('create') ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Plus className="w-4 h-4" />
+            )}
             <span>New Sub-Project</span>
           </button>
         </div>
@@ -172,17 +225,23 @@ export default function SubProjects({ subProjects, setSubProjects, projects, sel
                   <div className="flex items-center space-x-1">
                     <button
                       onClick={() => handleOpenEdit(sp)}
-                      className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                      disabled={loading.has(`edit-${sp.id}`)}
+                      className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
                       title="Edit Sub-project"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => handleDelete(sp.id)}
-                      className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-rose-400 transition-colors"
+                      disabled={loading.has(`delete-${sp.id}`)}
+                      className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-rose-400 transition-colors disabled:opacity-50"
                       title="Delete Sub-project"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      {loading.has(`delete-${sp.id}`) ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -260,9 +319,10 @@ export default function SubProjects({ subProjects, setSubProjects, projects, sel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl text-sm font-medium bg-brand-600 hover:bg-brand-500 text-white"
+                  disabled={loading.has(editId ? `edit-${editId}` : 'create')}
+                  className="px-4 py-2 rounded-xl text-sm font-medium bg-brand-600 hover:bg-brand-500 text-white disabled:opacity-50"
                 >
-                  Save
+                  {loading.has(editId ? `edit-${editId}` : 'create') ? 'Saving...' : 'Save'}
                 </button>
               </div>
             </form>

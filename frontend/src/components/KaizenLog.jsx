@@ -8,12 +8,15 @@ import {
   Trash2, 
   Tag, 
   Calendar,
-  Filter
+  Filter,
+  Loader2
 } from 'lucide-react';
+import { pb } from '../services/pocketbase';
 
-export default function KaizenLog({ logs, setLogs }) {
+export default function KaizenLog({ logs, setLogs, user }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filterImpact, setFilterImpact] = useState('All');
+  const [loading, setLoading] = useState(new Set());
 
   // Form State
   const [title, setTitle] = useState('');
@@ -23,31 +26,76 @@ export default function KaizenLog({ logs, setLogs }) {
   const [impact, setImpact] = useState('High');
   const [tags, setTags] = useState('');
 
-  const handleAddLog = (e) => {
+  const handleAddLog = async (e) => {
     e.preventDefault();
     if (!title.trim()) return;
 
-    const log = {
-      id: 'k_' + Date.now(),
+    setLoading(prev => new Set([...prev, 'create']));
+
+    const logData = {
       date: new Date().toISOString().split('T')[0],
       title: title.trim(),
       category: category.trim(),
       problem: problem.trim(),
       solution: solution.trim(),
       impact: impact,
-      tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [category]
+      tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [category],
+      user: user?.id
     };
 
-    setLogs([log, ...logs]);
-    setTitle('');
-    setProblem('');
-    setSolution('');
-    setTags('');
-    setIsModalOpen(false);
+    try {
+      if (pb.authStore.isValid) {
+        const created = await pb.collection('kaizen_logs').create(logData);
+        setLogs([created, ...logs]);
+      } else {
+        // Offline fallback
+        setLogs([{ id: 'k_' + Date.now(), ...logData }, ...logs]);
+      }
+    } catch (err) {
+      if (err?.status === 401) {
+        pb.authStore.clear();
+        window.location.href = '/login';
+        return;
+      }
+      console.warn('Failed to create kaizen log:', err);
+    } finally {
+      setLoading(prev => {
+        const next = new Set(prev);
+        next.delete('create');
+        return next;
+      });
+      setTitle('');
+      setProblem('');
+      setSolution('');
+      setTags('');
+      setIsModalOpen(false);
+    }
   };
 
-  const handleDeleteLog = (id) => {
+  const handleDeleteLog = async (id) => {
+    setLoading(prev => new Set([...prev, `delete-${id}`]));
+    const prevLogs = [...logs];
     setLogs(logs.filter(l => l.id !== id));
+
+    try {
+      if (pb.authStore.isValid) {
+        await pb.collection('kaizen_logs').delete(id);
+      }
+    } catch (err) {
+      setLogs(prevLogs);
+      if (err?.status === 401) {
+        pb.authStore.clear();
+        window.location.href = '/login';
+        return;
+      }
+      console.warn('Failed to delete kaizen log:', err);
+    } finally {
+      setLoading(prev => {
+        const next = new Set(prev);
+        next.delete(`delete-${id}`);
+        return next;
+      });
+    }
   };
 
   const filteredLogs = logs.filter(log => {
@@ -100,9 +148,14 @@ export default function KaizenLog({ logs, setLogs }) {
 
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium shadow-glow-emerald transition-all"
+            disabled={loading.has('create')}
+            className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium shadow-glow-emerald transition-all disabled:opacity-50"
           >
-            <Plus className="w-4 h-4" />
+            {loading.has('create') ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Plus className="w-4 h-4" />
+            )}
             <span>Log Kaizen Entry</span>
           </button>
         </div>
@@ -139,9 +192,14 @@ export default function KaizenLog({ logs, setLogs }) {
                   </span>
                   <button
                     onClick={() => handleDeleteLog(log.id)}
-                    className="text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                    disabled={loading.has(`delete-${log.id}`)}
+                    className="text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 disabled:opacity-50"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    {loading.has(`delete-${log.id}`) ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
                   </button>
                 </div>
               </div>
@@ -278,9 +336,10 @@ export default function KaizenLog({ logs, setLogs }) {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white shadow-glow-emerald"
+                  disabled={loading.has('create')}
+                  className="px-4 py-2 rounded-xl text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white shadow-glow-emerald disabled:opacity-50"
                 >
-                  Save Log
+                  {loading.has('create') ? 'Saving...' : 'Save Log'}
                 </button>
               </div>
             </form>

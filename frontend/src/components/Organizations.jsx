@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Plus, Users, Shield, UserPlus, Trash2 } from 'lucide-react';
+import { Building2, Plus, Users, Shield, UserPlus, Trash2, Loader2 } from 'lucide-react';
 import { pb } from '../services/pocketbase';
 
 export default function Organizations({ organizations, setOrganizations, selectedOrgId, setSelectedOrgId, user }) {
@@ -10,6 +10,7 @@ export default function Organizations({ organizations, setOrganizations, selecte
   const [activeOrgId, setActiveOrgId] = useState(selectedOrgId || (organizations[0]?.id || ''));
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [newMemberRole, setNewMemberRole] = useState('member');
+  const [loading, setLoading] = useState(new Set());
 
   useEffect(() => {
     if (selectedOrgId) setActiveOrgId(selectedOrgId);
@@ -17,42 +18,28 @@ export default function Organizations({ organizations, setOrganizations, selecte
 
   const activeOrg = organizations.find(o => o.id === activeOrgId) || organizations[0];
   const isAdmin = activeOrg
-    ? (activeOrg.owner === user.id || activeOrg.owner === 'u_admin' || user.role === 'Administrator' || user.role === 'admin')
+    ? (activeOrg.owner === user?.id)
     : true;
 
   useEffect(() => {
     async function loadMembers() {
-      if (!activeOrgId) return;
+      if (!activeOrgId || !pb.authStore.isValid) return;
       try {
-        if (pb.authStore.isValid || pb.health) {
-          const res = await pb.collection('organization_members').getFullList({
-            filter: `organization = "${activeOrgId}"`,
-            expand: 'user'
-          });
-          if (res.length > 0) {
-            setMembers(res);
-            return;
-          }
+        const res = await pb.collection('organization_members').getFullList({
+          filter: `organization = "${activeOrgId}"`,
+          expand: 'user',
+          requestKey: null
+        });
+        setMembers(res);
+      } catch (e) {
+        console.warn('Failed to load members:', e);
+        if (e?.status === 401) {
+          pb.authStore.clear();
+          window.location.href = '/login';
+          return;
         }
-      } catch (e) {}
-
-      // Fallback default members
-      setMembers([
-        {
-          id: 'm1',
-          user: user.id || 'u_admin',
-          organization: activeOrgId,
-          role: 'admin',
-          expand: { user: { name: user.username || 'Admin User', email: user.email || 'admin@kaizen.local' } }
-        },
-        {
-          id: 'm2',
-          user: 'u_member2',
-          organization: activeOrgId,
-          role: 'member',
-          expand: { user: { name: 'Alex Rivera', email: 'alex@kaizen.local' } }
-        }
-      ]);
+        setMembers([]);
+      }
     }
     loadMembers();
   }, [activeOrgId, user]);
@@ -60,75 +47,99 @@ export default function Organizations({ organizations, setOrganizations, selecte
   const handleCreateOrg = async (e) => {
     e.preventDefault();
     if (!name.trim()) return;
-    const tempId = 'org_' + Date.now();
-    const newOrg = {
-      id: tempId,
-      name: name.trim(),
-      description: description.trim(),
-      owner: user.id || 'u_admin',
-      created: new Date().toISOString()
-    };
+
+    setLoading(prev => new Set([...prev, 'create']));
+
     try {
       if (pb.authStore.isValid) {
         const created = await pb.collection('organizations').create({
           name: name.trim(),
           description: description.trim(),
-          owner: pb.authStore.model?.id || user.id
+          owner: pb.authStore.model?.id || user?.id
         });
         await pb.collection('organization_members').create({
-          user: pb.authStore.model?.id || user.id,
+          user: pb.authStore.model?.id || user?.id,
           organization: created.id,
           role: 'admin'
         });
         setOrganizations([...organizations, created]);
         setSelectedOrgId(created.id);
-      } else {
-        setOrganizations([...organizations, newOrg]);
-        setSelectedOrgId(newOrg.id);
       }
     } catch (err) {
-      setOrganizations([...organizations, newOrg]);
-      setSelectedOrgId(newOrg.id);
+      if (err?.status === 401) {
+        pb.authStore.clear();
+        window.location.href = '/login';
+        return;
+      }
+      console.warn('Failed to create organization:', err);
+    } finally {
+      setLoading(prev => {
+        const next = new Set(prev);
+        next.delete('create');
+        return next;
+      });
+      setName('');
+      setDescription('');
+      setIsCreateModalOpen(false);
     }
-    setName('');
-    setDescription('');
-    setIsCreateModalOpen(false);
   };
 
   const handleAddMember = async (e) => {
     e.preventDefault();
     if (!newMemberEmail.trim()) return;
-    const newMember = {
-      id: 'm_' + Date.now(),
-      user: 'u_' + Date.now(),
-      organization: activeOrgId,
-      role: newMemberRole,
-      expand: { user: { name: newMemberEmail.split('@')[0], email: newMemberEmail } }
-    };
+
+    setLoading(prev => new Set([...prev, 'add-member']));
+
     try {
       if (pb.authStore.isValid) {
         const created = await pb.collection('organization_members').create({
-          user: user.id,
+          user: newMemberEmail.trim(),
           organization: activeOrgId,
           role: newMemberRole
         });
         setMembers([...members, created]);
-      } else {
-        setMembers([...members, newMember]);
       }
     } catch (err) {
-      setMembers([...members, newMember]);
+      if (err?.status === 401) {
+        pb.authStore.clear();
+        window.location.href = '/login';
+        return;
+      }
+      console.warn('Failed to add member:', err);
+    } finally {
+      setLoading(prev => {
+        const next = new Set(prev);
+        next.delete('add-member');
+        return next;
+      });
+      setNewMemberEmail('');
     }
-    setNewMemberEmail('');
   };
 
   const handleRemoveMember = async (memberId) => {
+    setLoading(prev => new Set([...prev, `remove-${memberId}`]));
+    const prevMembers = [...members];
     setMembers(members.filter(m => m.id !== memberId));
+
     try {
       if (pb.authStore.isValid) {
         await pb.collection('organization_members').delete(memberId);
       }
-    } catch (e) {}
+    } catch (err) {
+      setMembers(prevMembers);
+      if (err?.status === 401) {
+        pb.authStore.clear();
+        window.location.href = '/login';
+        return;
+      }
+      console.warn('Failed to remove member:', err);
+    } finally {
+      setLoading(prev => {
+        const next = new Set(prev);
+        next.delete(`remove-${memberId}`);
+        return next;
+      });
+    }
   };
 
   return (
@@ -144,9 +155,14 @@ export default function Organizations({ organizations, setOrganizations, selecte
         </div>
         <button
           onClick={() => setIsCreateModalOpen(true)}
-          className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-medium text-sm shadow-glow transition-all"
+          disabled={loading.has('create')}
+          className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-medium text-sm shadow-glow transition-all disabled:opacity-50"
         >
-          <Plus className="w-4 h-4" />
+          {loading.has('create') ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Plus className="w-4 h-4" />
+          )}
           <span>New Organization</span>
         </button>
       </div>
@@ -236,9 +252,14 @@ export default function Organizations({ organizations, setOrganizations, selecte
                     </select>
                     <button
                       type="submit"
-                      className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium"
+                      disabled={loading.has('add-member')}
+                      className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium disabled:opacity-50"
                     >
-                      <UserPlus className="w-3.5 h-3.5" />
+                      {loading.has('add-member') ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <UserPlus className="w-3.5 h-3.5" />
+                      )}
                       <span>Add</span>
                     </button>
                   </form>
@@ -246,41 +267,50 @@ export default function Organizations({ organizations, setOrganizations, selecte
 
                 {/* Members List */}
                 <div className="space-y-2">
-                  {members.map(m => {
-                    const userName = m.expand?.user?.name || m.expand?.user?.email || m.user;
-                    const userEmail = m.expand?.user?.email || m.user;
-                    return (
-                      <div key={m.id} className="flex items-center justify-between p-3 bg-slate-950/60 rounded-xl border border-slate-800/80">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-300 text-xs font-bold uppercase">
-                            {userName.charAt(0)}
+                  {members.length === 0 ? (
+                    <p className="text-xs text-slate-500 text-center py-4">No members loaded.</p>
+                  ) : (
+                    members.map(m => {
+                      const userName = m.expand?.user?.name || m.expand?.user?.email || m.user;
+                      const userEmail = m.expand?.user?.email || m.user;
+                      return (
+                        <div key={m.id} className="flex items-center justify-between p-3 bg-slate-950/60 rounded-xl border border-slate-800/80">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-300 text-xs font-bold uppercase">
+                              {userName.charAt(0)}
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-white">{userName}</div>
+                              <div className="text-[10px] text-slate-400">{userEmail}</div>
+                            </div>
                           </div>
-                          <div>
-                            <div className="text-xs font-semibold text-white">{userName}</div>
-                            <div className="text-[10px] text-slate-400">{userEmail}</div>
+                          <div className="flex items-center space-x-3">
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                              m.role === 'admin'
+                                ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                : 'bg-slate-800 text-slate-400 border-slate-700'
+                            }`}>
+                              {m.role}
+                            </span>
+                            {isAdmin && m.user !== user?.id && (
+                              <button
+                                onClick={() => handleRemoveMember(m.id)}
+                                disabled={loading.has(`remove-${m.id}`)}
+                                className="text-slate-500 hover:text-rose-400 p-1 disabled:opacity-50"
+                                title="Remove member"
+                              >
+                                {loading.has(`remove-${m.id}`) ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            )}
                           </div>
                         </div>
-                        <div className="flex items-center space-x-3">
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                            m.role === 'admin'
-                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                              : 'bg-slate-800 text-slate-400 border-slate-700'
-                          }`}>
-                            {m.role}
-                          </span>
-                          {isAdmin && m.user !== user.id && (
-                            <button
-                              onClick={() => handleRemoveMember(m.id)}
-                              className="text-slate-500 hover:text-rose-400 p-1"
-                              title="Remove member"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </div>
             </div>
@@ -329,9 +359,10 @@ export default function Organizations({ organizations, setOrganizations, selecte
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl text-sm font-medium bg-brand-600 hover:bg-brand-500 text-white"
+                  disabled={loading.has('create')}
+                  className="px-4 py-2 rounded-xl text-sm font-medium bg-brand-600 hover:bg-brand-500 text-white disabled:opacity-50"
                 >
-                  Create
+                  {loading.has('create') ? 'Creating...' : 'Create'}
                 </button>
               </div>
             </form>

@@ -9,10 +9,12 @@ import {
   Calendar, 
   CheckCircle,
   Zap,
-  Tag
+  Tag,
+  Loader2
 } from 'lucide-react';
+import { pb } from '../services/pocketbase';
 
-export default function TimeManagement({ timeEntries, setTimeEntries }) {
+export default function TimeManagement({ timeEntries, setTimeEntries, user }) {
   // Timer State (in seconds)
   const [secondsLeft, setSecondsLeft] = useState(25 * 60);
   const [isActive, setIsActive] = useState(false);
@@ -23,6 +25,7 @@ export default function TimeManagement({ timeEntries, setTimeEntries }) {
   const [task, setTask] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(25);
   const [category, setCategory] = useState('Development');
+  const [loading, setLoading] = useState(new Set());
 
   useEffect(() => {
     let interval = null;
@@ -34,19 +37,39 @@ export default function TimeManagement({ timeEntries, setTimeEntries }) {
       setIsActive(false);
       // Auto Log completed session
       if (timerMode === 'work') {
-        const newEntry = {
-          id: 't_' + Date.now(),
-          project: project || 'General',
-          task: task || 'Pomodoro Focused Session',
-          durationMinutes: 25,
-          category: category || 'Focus',
-          date: new Date().toISOString()
-        };
-        setTimeEntries([newEntry, ...timeEntries]);
+        autoLogPomodoro();
       }
     }
     return () => clearInterval(interval);
-  }, [isActive, secondsLeft, timerMode, project, task, category, timeEntries, setTimeEntries]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, secondsLeft, timerMode]);
+
+  const autoLogPomodoro = async () => {
+    const entry = {
+      project: project || 'General',
+      task: task || 'Pomodoro Focused Session',
+      durationMinutes: 25,
+      category: category || 'Focus',
+      date: new Date().toISOString(),
+      user: user?.id
+    };
+
+    try {
+      if (pb.authStore.isValid) {
+        const created = await pb.collection('time_entries').create(entry);
+        setTimeEntries(prev => [created, ...prev]);
+      } else {
+        setTimeEntries(prev => [{ id: 't_' + Date.now(), ...entry }, ...prev]);
+      }
+    } catch (err) {
+      if (err?.status === 401) {
+        pb.authStore.clear();
+        window.location.href = '/login';
+        return;
+      }
+      console.warn('Failed to auto-log pomodoro:', err);
+    }
+  };
 
   const toggleTimer = () => setIsActive(!isActive);
 
@@ -62,21 +85,43 @@ export default function TimeManagement({ timeEntries, setTimeEntries }) {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const handleManualLog = (e) => {
+  const handleManualLog = async (e) => {
     e.preventDefault();
     if (!task.trim()) return;
 
+    setLoading(prev => new Set([...prev, 'create']));
+
     const entry = {
-      id: 't_' + Date.now(),
       project: project.trim(),
       task: task.trim(),
       durationMinutes: Number(durationMinutes),
       category: category.trim(),
-      date: new Date().toISOString()
+      date: new Date().toISOString(),
+      user: user?.id
     };
 
-    setTimeEntries([entry, ...timeEntries]);
-    setTask('');
+    try {
+      if (pb.authStore.isValid) {
+        const created = await pb.collection('time_entries').create(entry);
+        setTimeEntries([created, ...timeEntries]);
+      } else {
+        setTimeEntries([{ id: 't_' + Date.now(), ...entry }, ...timeEntries]);
+      }
+    } catch (err) {
+      if (err?.status === 401) {
+        pb.authStore.clear();
+        window.location.href = '/login';
+        return;
+      }
+      console.warn('Failed to log time entry:', err);
+    } finally {
+      setLoading(prev => {
+        const next = new Set(prev);
+        next.delete('create');
+        return next;
+      });
+      setTask('');
+    }
   };
 
   // Metrics Calculations
@@ -213,9 +258,14 @@ export default function TimeManagement({ timeEntries, setTimeEntries }) {
 
             <button
               type="submit"
-              className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl font-medium text-xs transition-colors flex items-center justify-center space-x-1.5"
+              disabled={loading.has('create')}
+              className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl font-medium text-xs transition-colors flex items-center justify-center space-x-1.5 disabled:opacity-50"
             >
-              <Plus className="w-3.5 h-3.5" />
+              {loading.has('create') ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Plus className="w-3.5 h-3.5" />
+              )}
               <span>Log Time Entry</span>
             </button>
           </form>

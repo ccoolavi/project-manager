@@ -8,7 +8,8 @@ import {
   Layers,
   Zap,
   LogOut,
-  User as UserIcon
+  User as UserIcon,
+  Heart
 } from 'lucide-react';
 
 export default function Navbar({ 
@@ -27,6 +28,7 @@ export default function Navbar({
     { id: 'habits', label: 'Habit Tracker', icon: CheckSquare },
     { id: 'kaizen', label: 'Kaizen Log', icon: TrendingUp },
     { id: 'time', label: 'Time Dashboard', icon: Clock },
+    { id: 'ikigai', label: 'Ikigai', icon: Heart },
   ];
 
   const displayName = user?.name || user?.email || user?.username || 'User';

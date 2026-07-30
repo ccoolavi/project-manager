@@ -7,14 +7,17 @@ import {
   Award, 
   Target, 
   CalendarDays,
-  Sparkles
+  Sparkles,
+  Loader2
 } from 'lucide-react';
+import { pb } from '../services/pocketbase';
 
-export default function HabitTracker({ habits, setHabits }) {
+export default function HabitTracker({ habits, setHabits, user }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Personal');
   const [newTarget, setNewTarget] = useState(7);
+  const [loading, setLoading] = useState(new Set());
 
   // Generate date labels for past 7 days ending today
   const getLast7Days = () => {
@@ -33,49 +36,131 @@ export default function HabitTracker({ habits, setHabits }) {
   const daysList = getLast7Days();
   const todayIso = daysList[daysList.length - 1].iso;
 
-  const toggleHabitDay = (habitId, dateIso) => {
-    const updated = habits.map(h => {
-      if (h.id !== habitId) return h;
+  const toggleHabitDay = async (habitId, dateIso) => {
+    const habit = habits.find(h => h.id === habitId);
+    if (!habit) return;
 
-      const dates = h.completedDates || [];
-      const exists = dates.includes(dateIso);
-      let newDates;
-      let newStreak = h.streak || 0;
+    setLoading(prev => new Set([...prev, `toggle-${habitId}`]));
 
-      if (exists) {
-        newDates = dates.filter(d => d !== dateIso);
-        if (dateIso === todayIso && newStreak > 0) newStreak -= 1;
-      } else {
-        newDates = [...dates, dateIso];
-        if (dateIso === todayIso) newStreak += 1;
-      }
+    const dates = habit.completedDates || [];
+    const exists = dates.includes(dateIso);
+    let newDates;
+    let newStreak = habit.streak || 0;
 
-      return { ...h, completedDates: newDates, streak: newStreak };
-    });
+    if (exists) {
+      newDates = dates.filter(d => d !== dateIso);
+      if (dateIso === todayIso && newStreak > 0) newStreak -= 1;
+    } else {
+      newDates = [...dates, dateIso];
+      if (dateIso === todayIso) newStreak += 1;
+    }
 
+    // Optimistic update
+    const updated = habits.map(h =>
+      h.id === habitId ? { ...h, completedDates: newDates, streak: newStreak } : h
+    );
     setHabits(updated);
+
+    try {
+      if (pb.authStore.isValid) {
+        await pb.collection('habits').update(habitId, {
+          completedDates: newDates,
+          streak: newStreak
+        });
+      }
+    } catch (err) {
+      // Revert on error
+      setHabits(habits);
+      if (err?.status === 401) {
+        pb.authStore.clear();
+        window.location.href = '/login';
+        return;
+      }
+      console.warn('Failed to update habit:', err);
+    } finally {
+      setLoading(prev => {
+        const next = new Set(prev);
+        next.delete(`toggle-${habitId}`);
+        return next;
+      });
+    }
   };
 
-  const handleAddHabit = (e) => {
+  const handleAddHabit = async (e) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
+    setLoading(prev => new Set([...prev, 'create']));
 
-    const habit = {
-      id: 'h_' + Date.now(),
-      title: newTitle.trim(),
-      category: newCategory,
-      targetDays: Number(newTarget),
-      streak: 0,
-      completedDates: []
-    };
-
-    setHabits([...habits, habit]);
-    setNewTitle('');
-    setIsModalOpen(false);
+    try {
+      if (pb.authStore.isValid) {
+        const created = await pb.collection('habits').create({
+          title: newTitle.trim(),
+          category: newCategory,
+          targetDays: Number(newTarget),
+          streak: 0,
+          completedDates: [],
+          user: pb.authStore.model?.id || user?.id
+        });
+        setHabits([...habits, created]);
+      } else {
+        // Offline fallback
+        setHabits([...habits, {
+          id: 'h_' + Date.now(),
+          title: newTitle.trim(),
+          category: newCategory,
+          targetDays: Number(newTarget),
+          streak: 0,
+          completedDates: []
+        }]);
+      }
+    } catch (err) {
+      if (err?.status === 401) {
+        pb.authStore.clear();
+        window.location.href = '/login';
+        return;
+      }
+      console.warn('Failed to create habit:', err);
+    } finally {
+      setLoading(prev => {
+        const next = new Set(prev);
+        next.delete('create');
+        return next;
+      });
+      setNewTitle('');
+      setIsModalOpen(false);
+    }
   };
 
-  const handleDeleteHabit = (id) => {
+  const handleDeleteHabit = async (id) => {
+    setLoading(prev => new Set([...prev, `delete-${id}`]));
+    // Optimistic removal
     setHabits(habits.filter(h => h.id !== id));
+
+    try {
+      if (pb.authStore.isValid) {
+        await pb.collection('habits').delete(id);
+      }
+    } catch (err) {
+      // Revert on error
+      try {
+        const restored = await pb.collection('habits').getOne(id);
+        setHabits(prev => [...prev, restored]);
+      } catch {
+        // If can't restore from server, just keep it removed
+      }
+      if (err?.status === 401) {
+        pb.authStore.clear();
+        window.location.href = '/login';
+        return;
+      }
+      console.warn('Failed to delete habit:', err);
+    } finally {
+      setLoading(prev => {
+        const next = new Set(prev);
+        next.delete(`delete-${id}`);
+        return next;
+      });
+    }
   };
 
   // Calculate overall metrics
@@ -126,9 +211,14 @@ export default function HabitTracker({ habits, setHabits }) {
           </div>
           <button
             onClick={() => setIsModalOpen(true)}
-            className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-medium text-xs shadow-glow transition-all flex items-center gap-1.5 shrink-0"
+            disabled={loading.has('create')}
+            className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-medium text-xs shadow-glow transition-all flex items-center gap-1.5 shrink-0 disabled:opacity-50"
           >
-            <Plus className="w-4 h-4" />
+            {loading.has('create') ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Plus className="w-4 h-4" />
+            )}
             <span>Add Habit</span>
           </button>
         </div>
@@ -153,6 +243,7 @@ export default function HabitTracker({ habits, setHabits }) {
             {habits.map((habit) => {
               const dates = habit.completedDates || [];
               const weekCompletedCount = daysList.filter(d => dates.includes(d.iso)).length;
+              const isToggling = loading.has(`toggle-${habit.id}`);
 
               return (
                 <div
@@ -163,13 +254,18 @@ export default function HabitTracker({ habits, setHabits }) {
                   <div className="flex items-center space-x-3 min-w-[240px]">
                     <button
                       onClick={() => toggleHabitDay(habit.id, todayIso)}
+                      disabled={isToggling}
                       className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
                         dates.includes(todayIso)
                           ? 'bg-emerald-500 text-white shadow-glow-emerald'
                           : 'bg-slate-900 border border-slate-800 text-slate-600 hover:border-slate-600'
-                      }`}
+                      } disabled:opacity-50`}
                     >
-                      <Check className="w-5 h-5" />
+                      {isToggling ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Check className="w-5 h-5" />
+                      )}
                     </button>
                     <div>
                       <h4 className="font-semibold text-slate-100 text-sm">{habit.title}</h4>
@@ -198,13 +294,14 @@ export default function HabitTracker({ habits, setHabits }) {
                           </span>
                           <button
                             onClick={() => toggleHabitDay(habit.id, day.iso)}
+                            disabled={isToggling}
                             className={`w-8 h-8 rounded-lg text-xs font-semibold flex items-center justify-center transition-all ${
                               isCompleted
                                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
                                 : isToday
                                 ? 'bg-slate-900 border border-brand-500/40 text-slate-400 hover:text-white'
                                 : 'bg-slate-900 border border-slate-800 text-slate-600 hover:text-slate-400'
-                            }`}
+                            } disabled:opacity-50`}
                           >
                             {isCompleted ? <Check className="w-4 h-4 text-emerald-400" /> : day.dayNum}
                           </button>
@@ -226,9 +323,14 @@ export default function HabitTracker({ habits, setHabits }) {
                     </div>
                     <button
                       onClick={() => handleDeleteHabit(habit.id)}
-                      className="text-slate-500 hover:text-rose-400 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      disabled={loading.has(`delete-${habit.id}`)}
+                      className="text-slate-500 hover:text-rose-400 p-1 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      {loading.has(`delete-${habit.id}`) ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -290,9 +392,10 @@ export default function HabitTracker({ habits, setHabits }) {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl text-sm font-medium bg-brand-600 hover:bg-brand-500 text-white"
+                  disabled={loading.has('create')}
+                  className="px-4 py-2 rounded-xl text-sm font-medium bg-brand-600 hover:bg-brand-500 text-white disabled:opacity-50"
                 >
-                  Save Habit
+                  {loading.has('create') ? 'Saving...' : 'Save Habit'}
                 </button>
               </div>
             </form>

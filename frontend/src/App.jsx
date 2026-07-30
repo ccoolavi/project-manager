@@ -7,6 +7,7 @@ import KaizenLog from './components/KaizenLog';
 import TimeManagement from './components/TimeManagement';
 import Organizations from './components/Organizations';
 import SubProjects from './components/SubProjects';
+import Ikigai from './components/Ikigai';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import {
@@ -267,15 +268,19 @@ function Dashboard() {
         )}
 
         {activeTab === 'habits' && (
-          <HabitTracker habits={habits} setHabits={handleSetHabits} />
+          <HabitTracker habits={habits} setHabits={handleSetHabits} user={user} />
         )}
 
         {activeTab === 'kaizen' && (
-          <KaizenLog logs={logs} setLogs={handleSetLogs} />
+          <KaizenLog logs={logs} setLogs={handleSetLogs} user={user} />
         )}
 
         {activeTab === 'time' && (
-          <TimeManagement timeEntries={timeEntries} setTimeEntries={handleSetTimeEntries} />
+          <TimeManagement timeEntries={timeEntries} setTimeEntries={handleSetTimeEntries} user={user} />
+        )}
+
+        {activeTab === 'ikigai' && (
+          <Ikigai />
         )}
       </main>
 
