@@ -9,7 +9,7 @@ import path from 'path';
 
 dotenv.config();
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
 const PB_URL = process.env.PB_URL || 'http://127.0.0.1:8090';
 const PB_ADMIN_EMAIL = process.env.PB_ADMIN_EMAIL || '';
 const PB_ADMIN_PASSWORD = process.env.PB_ADMIN_PASSWORD || '';
@@ -193,8 +193,10 @@ async function handleVerifyOTP(req, res) {
 }
 
 // Register routes
+app.post('/api/whatsapp/send-otp', handleSendOTP);
 app.post('/api/send-otp', handleSendOTP);
 app.post('/send-otp', handleSendOTP);
+app.post('/api/whatsapp/verify-otp', handleVerifyOTP);
 app.post('/api/verify-otp', handleVerifyOTP);
 app.post('/verify-otp', handleVerifyOTP);
 

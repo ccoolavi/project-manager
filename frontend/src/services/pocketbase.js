@@ -6,6 +6,10 @@ const VITE_PB_URL = import.meta.env.VITE_PB_URL;
 const PB_URL = VITE_PB_URL || 'http://92.4.85.159:8090';
 export const pb = new PocketBase(PB_URL);
 
+// OTP service URL — derived from PB_URL by replacing port 8090 with 3002
+// The WhatsApp OTP gateway runs as a separate Node.js Express service
+const OTP_URL = PB_URL.replace(':8090', ':3002');
+
 // Helper to check if PocketBase server is reachable
 export async function checkBackendHealth() {
   try {
@@ -129,7 +133,7 @@ export const UserService = {
   async sendWhatsAppOTP(phoneNumber) {
     // Call Node.js Baileys / Meta OTP endpoint if server available, else fallback simulation
     try {
-      const response = await fetch('/api/whatsapp/send-otp', {
+      const response = await fetch(`${OTP_URL}/api/whatsapp/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: phoneNumber })
@@ -143,7 +147,7 @@ export const UserService = {
   },
   async verifyWhatsAppOTP(phoneNumber, code) {
     try {
-      const response = await fetch('/api/whatsapp/verify-otp', {
+      const response = await fetch(`${OTP_URL}/api/whatsapp/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: phoneNumber, code })
