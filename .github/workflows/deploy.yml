@@ -42,7 +42,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_PB_URL: http://92.4.85.159:8090
+          VITE_PB_URL: https://optimum-administrators-meditation-default.trycloudflare.com
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
