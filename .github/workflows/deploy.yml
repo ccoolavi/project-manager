@@ -42,7 +42,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_PB_URL: https://optimum-administrators-meditation-default.trycloudflare.com
+          VITE_PB_URL: https://less-jump-patricia-jan.trycloudflare.com
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
