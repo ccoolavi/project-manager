@@ -12,9 +12,9 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import {
   pb,
-  isAuthenticated,
   getCurrentUser,
   logoutUser,
+  validateSession,
 } from './services/pocketbase';
 import { Building2 } from 'lucide-react';
 
@@ -32,17 +32,26 @@ function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (isAuthenticated()) {
-      setUser(getCurrentUser());
-      setToken(pb.authStore.token);
+    let cancelled = false;
+
+    async function boot() {
+      // Security layer: persisted auth is trusted ONLY after server re-validates it.
+      const valid = await validateSession();
+      if (cancelled) return;
+      if (valid) {
+        setUser(getCurrentUser());
+        setToken(pb.authStore.token);
+      }
+      setLoading(false);
     }
-    setLoading(false);
+
+    boot();
 
     const unsubscribe = pb.authStore.onChange((newToken, model) => {
       setToken(newToken);
       setUser(model);
     });
-    return unsubscribe;
+    return () => { cancelled = true; unsubscribe(); };
   }, []);
 
   const login = useCallback(async (email, password) => {

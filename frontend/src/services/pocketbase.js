@@ -4,7 +4,33 @@ import PocketBase from 'pocketbase';
 // When hosted on GitHub Pages, VITE_PB_URL is embedded at build time.
 const VITE_PB_URL = import.meta.env.VITE_PB_URL;
 const PB_URL = VITE_PB_URL || 'http://92.4.85.159:8090';
-export const pb = new PocketBase(PB_URL);
+
+// Security layer: force fresh data on every visit.
+// Custom fetch wrapper injects `cache: no-store` so the browser NEVER
+// serves stale DB data from HTTP cache — every page load pulls from server.
+const freshFetch = (url, options = {}) => {
+  const init = { ...options };
+  init.cache = 'no-store';
+  init.headers = { ...(options.headers || {}) };
+  return fetch(url, init);
+};
+
+export const pb = new PocketBase(PB_URL, freshFetch);
+
+// Security layer: validate the persisted auth token against the server.
+// Auth stays persistent on the device (localStorage), but every page load
+// re-verifies the token is still valid server-side before trusting it.
+export async function validateSession() {
+  if (!pb.authStore.isValid) return false;
+  try {
+    await pb.collection('users').authRefresh();
+    return pb.authStore.isValid;
+  } catch (e) {
+    // Token expired/revoked — clear it and force re-login
+    pb.authStore.clear();
+    return false;
+  }
+}
 
 // Helper to check if PocketBase server is reachable
 export async function checkBackendHealth() {
