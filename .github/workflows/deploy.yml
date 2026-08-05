@@ -42,7 +42,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_PB_URL: https://less-jump-patricia-jan.trycloudflare.com
+          VITE_PB_URL: https://shakira-unsigned-wins-dark.trycloudflare.com
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
