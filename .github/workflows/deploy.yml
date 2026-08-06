@@ -42,7 +42,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_PB_URL: https://shakira-unsigned-wins-dark.trycloudflare.com
+          VITE_PB_URL: https://developers-took-cognitive-vsnet.trycloudflare.com
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
