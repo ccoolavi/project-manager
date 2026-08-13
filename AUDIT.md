@@ -232,6 +232,49 @@ Ordered so that the user can *see* something work as early as possible.
 
 ---
 
+---
+
+## 3a. Closing state — 2026-08-13
+
+Every item in the plan above is done except OTP delivery, which the user held.
+
+| Suite | Command | Result |
+|---|---|---|
+| Backend unit | `backend/venv/bin/python -m pytest` | **26 passed** |
+| API end-to-end, public HTTPS | `bash backend/tests/e2e_api.sh` | **19 passed** |
+| Browser journey, deployed site | `node frontend/tests/ui-live.mjs` | **19 passed** |
+| Offline sync, deployed site | `node frontend/tests/offline-sync.mjs` | **5 passed** |
+
+### Original 13-point brief — final status
+
+| # | Requirement | Status |
+|---|---|---|
+| 1 | Personal time + habit tracking, private per user | Done — habits, time, kaizen and ikigai are all per-user |
+| 2 | Login + user DB on this server, free | Done — SQLite |
+| 3 | WhatsApp/Signal integration for OTP | **Held** — endpoints and tests done; no delivery channel available |
+| 4 | Admin-provisioned accounts with generated passwords | Done — `pm-cli.py user create` |
+| 5 | Kanban, ikigai, kaizen | Done |
+| 6 | CLI + docs for autonomous agent use | Done — `pm-cli.py`, `CLI.md` |
+| 7 | Resource-efficient on 6 GB / 1 OCPU | Done — one uvicorn worker, `MemoryMax=512M`, PocketBase retired |
+| 8 | Detachable DB | Done — single SQLite file, `db backup` / `db restore` |
+| 9 | Client talks to one exposed endpoint; data only after auth | Done — HTTPS tunnel, JWT on every route |
+| 10 | Cross-device compatible | Partly — responsive layout, verified at desktop width only |
+| 11 | Beautiful, elegant, functional | Done enough to use; subjective |
+| 12 | Other standard PM features | Partly — no due-date reminders, attachments or search |
+| 13 | Progress file with per-task verification | This file |
+
+### Known remaining gaps
+
+- **OTP delivery** has no channel. The WhatsApp bridge is not running; `signal-cli`
+  on `127.0.0.1:8081` is a candidate. Nothing user-facing depends on it.
+- **Mobile layout is unverified.** The CSS is responsive but has only been
+  exercised at 1280×900.
+- **The API host is still an ephemeral tunnel.** Rotation no longer breaks the
+  client, but a named tunnel would remove the moving part entirely.
+- **No audit-log UI.** The table and model exist; nothing writes to or reads it.
+- **`InviteAcceptPage` is still a stub.** Invited users who already have an
+  account are added directly, so the token flow is unused in practice.
+
 ## 4. Standing rule for this project
 
 No task is marked complete in this file without the verification column filled in with a
