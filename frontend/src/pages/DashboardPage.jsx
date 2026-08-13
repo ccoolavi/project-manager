@@ -13,6 +13,7 @@ import KaizenLog from '../components/KaizenLog'
 import MemberManager from '../components/MemberManager'
 import Ikigai from '../components/Ikigai'
 import WorkloadView from '../components/WorkloadView'
+import AnalyticsPage from './AnalyticsPage'
 import PendingInvites from '../components/PendingInvites'
 import ActivityLog from '../components/ActivityLog'
 import api from '../utils/api'
@@ -26,6 +27,7 @@ const TAB_TITLES = {
   kaizen: 'Kaizen',
   ikigai: 'Purpose',
   workload: 'Workload',
+  analytics: 'Analytics',
   settings: 'Settings'
 }
 
@@ -183,6 +185,11 @@ export default function DashboardPage() {
             {/* Workload Tab */}
             {activeTab === 'workload' && (
               <WorkloadView />
+            )}
+
+            {/* Analytics Tab */}
+            {activeTab === 'analytics' && (
+              <AnalyticsPage />
             )}
 
             {/* Settings Tab */}
