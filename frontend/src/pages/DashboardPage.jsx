@@ -45,6 +45,21 @@ export default function DashboardPage() {
     setShowCreateOrgModal(initialized && !currentOrg)
   }, [currentOrg, initialized])
 
+  useEffect(() => {
+    // GlobalSearch lives in Navbar, outside this component's tree, and this
+    // app uses tab state rather than routes for the workspace screens — a
+    // window event is the simplest way for a search result to jump the
+    // dashboard to the right tab and project/section.
+    const onNavigate = (e) => {
+      const { tab, projectId, subProjectId } = e.detail || {}
+      if (tab) setActiveTab(tab)
+      if (projectId != null) setSelectedProjectId(projectId)
+      if (subProjectId != null) setSelectedSubProjectId(subProjectId)
+    }
+    window.addEventListener('kaizenpm:navigate', onNavigate)
+    return () => window.removeEventListener('kaizenpm:navigate', onNavigate)
+  }, [])
+
   const handleCreateOrg = async () => {
     if (!orgName.trim()) return
     setLoading(true)

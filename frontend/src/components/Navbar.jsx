@@ -1,5 +1,6 @@
 import { useAuth } from '../context/AuthContext'
 import SyncStatus from './SyncStatus'
+import GlobalSearch from './GlobalSearch'
 import { useOrg } from '../context/OrgContext'
 import { LogOut } from 'lucide-react'
 
@@ -24,6 +25,8 @@ export default function Navbar() {
           ))}
         </select>
       </div>
+
+      <GlobalSearch />
 
       <div className="flex items-center gap-2 sm:gap-4 shrink-0">
         <SyncStatus />
