@@ -31,7 +31,19 @@ MAIN_JS=$(cd dist && ls assets/index-*.js | head -1)
 echo "==> Copying build to repository root (the path Pages actually serves)"
 cd "$PROJECT_DIR"
 rm -rf assets icons
+
+# config.json holds the *live* API endpoint and is rewritten independently by
+# rotate-tunnel.sh. Copying the build's copy over it would silently roll the
+# deployed client back to whichever tunnel was current at build time.
+LIVE_CONFIG=""
+[ -f config.json ] && LIVE_CONFIG=$(cat config.json)
+
 cp -r frontend/dist/. .
+
+if [ -n "$LIVE_CONFIG" ]; then
+  printf '%s\n' "$LIVE_CONFIG" > config.json
+  cp config.json frontend/public/config.json
+fi
 touch .nojekyll
 
 git add -A
