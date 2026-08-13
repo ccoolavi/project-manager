@@ -1,6 +1,6 @@
 #!/bin/bash
 # End-to-end API verification against the PUBLIC HTTPS endpoint.
-API="https://billion-coaches-protest-reveal.trycloudflare.com"
+API="https://dome-fate-votes-gourmet.trycloudflare.com"
 ORIGIN="https://ccoolavi.github.io"
 J="Content-Type: application/json"
 O="Origin: $ORIGIN"

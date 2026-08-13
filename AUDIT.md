@@ -275,6 +275,86 @@ Every item in the plan above is done except OTP delivery, which the user held.
 - **`InviteAcceptPage` is still a stub.** Invited users who already have an
   account are added directly, so the token flow is unused in practice.
 
+## 3b. Second closing state — 2026-08-13 (main_agent_prompt.md, Part A + B1–B11 + C3/C4)
+
+A second, larger scope of work landed after 3a: the four immediate fixes in Part A,
+eleven new features (B1–B11), the CLI extension (C3), and — at the user's direct,
+mid-session request — email-based login/2FA that wasn't in the original plan at all.
+
+| Suite | Command | Result |
+|---|---|---|
+| Backend unit | `backend/venv/bin/python -m pytest` | **88 passed** |
+| API end-to-end, public HTTPS | `bash backend/tests/e2e_api.sh` | **19 passed** |
+| Browser journey, deployed site | `node frontend/tests/ui-live.mjs` | **19 passed** |
+| Offline sync, deployed site | `node frontend/tests/offline-sync.mjs` | **5 passed** |
+| Plus 11 feature-specific curl suites and 11 feature-specific live-browser suites, one per B-phase feature and email OTP | `backend/tests/curl_*.sh`, `frontend/tests/*-ui.mjs` | all passing at time of commit |
+
+### What shipped
+
+- **Part A**: stale `config.json` redeployed, duplicate `httpx` line removed,
+  README rewritten to describe the real FastAPI/SQLAlchemy/SQLite architecture,
+  `Caddyfile`'s leftover `PocketBase-Token` CORS header replaced.
+- **B1 Task Comments** — threaded comments on tasks, comment count on cards.
+- **B2 Global Search** — projects/tasks/habits/kaizen, org-scoped.
+- **B3 Notifications** — polled every 30s, triggered on assignment/comment/invite.
+- **B4 Task Detail Panel** — full editing drawer: status, priority, dates, assignee,
+  story points, comments.
+- **B5 Team Workload** — stacked bar chart of assigned tasks by status per person.
+- **B6 Analytics** — completion rate, habit leaderboard, time by category, velocity.
+- **B7 Timeline/Gantt** — hand-rolled bar chart, no library.
+- **B8 Task Dependencies** — "blocked by" with a server-computed `blocked` flag.
+- **B9 Sprint Planning** — sprints, story-point burndown, per-sprint board.
+- **B10 Calendar** — monthly grid, org-wide task fetch via a new flat endpoint.
+- **B11 Bulk Operations** — multi-select + bulk status/priority/assign/delete.
+- **C3** — `pm-cli.py` extended with `comment`, `notification`, `sprint`, `search`.
+- **Email OTP (user request, not in the original plan)** — login by email or
+  phone; a device the account has never used is challenged with an emailed code;
+  sensitive actions (removing a member, deleting a project) require a fresh code
+  within a 5-minute window; both skip cleanly when the account has no email or the
+  caller is a non-browser client (no `device_id`), so `pm-cli.py` automation is
+  unaffected.
+
+### Real bugs the verification loop actually caught (not just written, — proven)
+
+- **`AmbiguousForeignKeysError`** on `User.assigned_tasks` — pre-existing, found
+  while wiring B1.
+- **Cross-org bulk-action leak pattern re-tested**: B11's bulk endpoint validates
+  every `task_id` independently against the org, the same class of bug fixed once
+  before in `utils/tenancy.py`; a dedicated test (`test_bulk_cross_org_task_id_reported_as_failed_not_silently_dropped`)
+  pins it so it can't return silently a third time.
+- **Blocking SMTP send** (email OTP): a live-browser test showed the
+  sensitive-action modal took 4+ seconds to appear because the SMTP send
+  blocked the HTTP response; moved to `BackgroundTasks` so the code is valid and
+  the response returns immediately, and the same test re-run afterward confirmed
+  the fix.
+- **Stale `blocked` flag across tasks** (B8): finishing a blocking task left the
+  *other*, unedited task's card still showing its lock icon, because the client
+  patched only the single edited task into local state. `KanbanBoard` and
+  `GanttView` now reload the full task list on any save.
+- **Ambiguous test locator became a real accessibility fix** (B11): the bulk
+  delete button had no way to be distinguished from the half-dozen per-card
+  delete buttons already on the page — not just a test problem, a screen-reader
+  problem — so it got an `aria-label`, not just a better test selector.
+- **Deploy race**: `deploy-frontend.sh` copying the whole build over the repo
+  root could clobber a `config.json` that `rotate-tunnel.sh` had just rewritten
+  mid-deploy; fixed to preserve the live config and feed it back into the
+  source tree.
+
+### Still open
+
+- **OTP *delivery* for the original WhatsApp-based 2FA** remains held — no
+  channel is configured. The new **email**-based challenge/2FA is live and
+  delivers real mail through the Hermes gateway's Gmail account.
+- **Mobile layout** was fixed for the sidebar/navbar earlier in this project but
+  the eleven new B-phase screens (analytics charts, Gantt, calendar, sprint
+  board) have not been individually verified at phone width.
+- **The API host is still an ephemeral tunnel.** Rotation no longer breaks the
+  client (runtime `config.json`), but a named tunnel would remove the moving
+  part entirely.
+- **No audit-log UI for the newer entities** (sprints, dependencies) — the
+  existing audit log only covers projects/tasks/members/comments.
+- **`InviteAcceptPage` is still a stub**, unchanged from 3a.
+
 ## 4. Standing rule for this project
 
 No task is marked complete in this file without the verification column filled in with a
