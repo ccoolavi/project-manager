@@ -140,6 +140,7 @@ class TaskResponse(BaseModel):
     created_by: int
     created_at: datetime
     comment_count: int = 0
+    blocked: bool = False
 
     class Config:
         from_attributes = True
@@ -300,6 +301,21 @@ class NotificationResponse(BaseModel):
     entity_type: Optional[str] = None
     entity_id: Optional[int] = None
     read_at: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Task Dependency Schemas
+class TaskDependencyCreate(BaseModel):
+    depends_on_id: int
+
+class TaskDependencyResponse(BaseModel):
+    id: int
+    task_id: int
+    depends_on_id: int
+    depends_on_title: str
+    depends_on_status: str
     created_at: datetime
 
     class Config:

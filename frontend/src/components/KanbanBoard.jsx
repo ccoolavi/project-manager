@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, ChevronRight, MessageSquare } from 'lucide-react'
+import { Plus, Trash2, ChevronRight, MessageSquare, Lock } from 'lucide-react'
 import api from '../utils/api'
 import { useOrg } from '../context/OrgContext'
 import TaskDetailPanel from './TaskDetailPanel'
@@ -92,7 +92,12 @@ export default function KanbanBoard({ projectId, subProjectId }) {
     >
       <div className="flex justify-between items-start">
         <div className="flex-1 min-w-0">
-          <p className="text-white font-medium text-sm break-words">{task.title}</p>
+          <div className="flex items-center gap-1.5">
+            {task.blocked && (
+              <Lock size={12} className="text-amber-400 shrink-0" aria-label="Blocked by another task" />
+            )}
+            <p className="text-white font-medium text-sm break-words">{task.title}</p>
+          </div>
           <div className="flex items-center gap-2 mt-1">
             <span className={`text-xs inline-block px-2 py-1 rounded ${
               task.priority === 'urgent' ? 'bg-red-500/20 text-red-300' :

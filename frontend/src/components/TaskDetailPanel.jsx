@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { X, Check } from 'lucide-react'
 import api from '../utils/api'
 import TaskComments from './TaskComments'
+import TaskDependencies from './TaskDependencies'
 import { TASK_STATUSES, TASK_PRIORITIES } from '../config'
 
 const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' }
@@ -162,6 +163,24 @@ export default function TaskDetailPanel({ orgId, projectId, subProjectId, task, 
           {task.description && (
             <p className="text-sm text-slate-300 whitespace-pre-wrap">{task.description}</p>
           )}
+
+          <TaskDependencies
+            orgId={orgId}
+            projectId={projectId}
+            subProjectId={subProjectId}
+            task={task}
+            onBlockedChange={async () => {
+              // Adding/removing a dependency changes the server-computed
+              // `blocked` flag on this task; re-fetch it so the lock icon
+              // here and on the Kanban card stay in sync.
+              try {
+                const res = await api.get(baseUrl)
+                onTaskUpdate?.(res.data)
+              } catch {
+                // Non-fatal — the dependency itself already saved.
+              }
+            }}
+          />
 
           <TaskComments
             orgId={orgId}

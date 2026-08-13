@@ -150,10 +150,26 @@ class Task(Base):
     created_by_user = relationship("User", foreign_keys=[created_by], back_populates="created_tasks")
     time_entries = relationship("TimeEntry", back_populates="task", cascade="all, delete-orphan")
     comments = relationship("TaskComment", back_populates="task", cascade="all, delete-orphan")
+    # Dependencies this task is waiting on. TaskDependency.task_id is "the
+    # blocked task" and depends_on_id is "the blocking task", so this side of
+    # the relationship must be pinned to task_id explicitly.
+    dependencies = relationship(
+        "TaskDependency",
+        foreign_keys="TaskDependency.task_id",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def comment_count(self):
         return len(self.comments)
+
+    @property
+    def blocked(self):
+        """True while any task this one depends on is not yet done."""
+        return any(
+            dep.depends_on and dep.depends_on.status != TaskStatus.done
+            for dep in self.dependencies
+        )
 
 class TaskComment(Base):
     __tablename__ = "task_comments"
@@ -167,6 +183,22 @@ class TaskComment(Base):
 
     task = relationship("Task", back_populates="comments")
     user = relationship("User")
+
+class TaskDependency(Base):
+    """`task_id` cannot proceed until `depends_on_id` reaches done."""
+
+    __tablename__ = "task_dependencies"
+
+    id = Column(Integer, primary_key=True)
+    task_id = Column(Integer, ForeignKey("tasks.id"), index=True)
+    depends_on_id = Column(Integer, ForeignKey("tasks.id"), index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Only the "blocking task" side is navigated (see Task.blocked); the
+    # "blocked task" side already exists via Task.dependencies, so a second
+    # relationship back onto task_id here would just create an unused,
+    # overlapping mapping.
+    depends_on = relationship("Task", foreign_keys=[depends_on_id])
 
 class Habit(Base):
     __tablename__ = "habits"
