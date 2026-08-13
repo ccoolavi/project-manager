@@ -195,7 +195,11 @@ export default function KanbanBoard({ projectId, subProjectId }) {
           task={openTask}
           members={members}
           onClose={() => setOpenTaskId(null)}
-          onTaskUpdate={(updated) => setTasks((current) => current.map((t) => (t.id === updated.id ? updated : t)))}
+          // Re-fetch the whole board rather than patching just the edited task:
+          // changing one task's status can flip another task's server-computed
+          // `blocked` flag (see TaskDependencies), and a single-row patch would
+          // leave that other card showing a stale lock icon.
+          onTaskUpdate={fetchTasks}
         />
       )}
     </div>

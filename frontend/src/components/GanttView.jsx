@@ -180,13 +180,12 @@ export default function GanttView() {
           members={members}
           onClose={() => setOpenTask(null)}
           onTaskUpdate={(updated) => {
+            // Patch the open panel immediately for a responsive feel, then
+            // reload every row: changing one task's status can flip another
+            // task's server-computed `blocked` flag (see TaskDependencies),
+            // which a single-row patch would never pick up.
             setOpenTask((cur) => (cur ? { ...cur, task: updated } : cur))
-            setRows((cur) =>
-              cur.map((g) => ({
-                ...g,
-                tasks: g.tasks.map((r) => (r.task.id === updated.id ? { ...r, task: updated } : r))
-              }))
-            )
+            load()
           }}
         />
       )}
