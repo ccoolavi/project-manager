@@ -277,3 +277,39 @@ class Ikigai(Base):
     purpose = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class TrustedDevice(Base):
+    """A browser/device that has already completed an email-OTP challenge for
+    this user. Login from a known device skips the OTP step; the id is a
+    client-generated value persisted in localStorage, not tied to IP or
+    fingerprinting, so it survives normal network changes."""
+
+    __tablename__ = "trusted_devices"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    device_id = Column(String, index=True)
+    user_agent = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_seen_at = Column(DateTime, default=datetime.utcnow)
+
+
+class EmailOTP(Base):
+    """One-time codes sent by email, for two purposes:
+
+    - ``login_device``: challenge issued before a login on an unrecognised
+      device completes.
+    - ``sensitive_action``: a short-lived re-verification required immediately
+      before a destructive action, independent of login state.
+    """
+
+    __tablename__ = "email_otps"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    purpose = Column(String)
+    otp_hash = Column(String)
+    expires_at = Column(DateTime)
+    verified_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

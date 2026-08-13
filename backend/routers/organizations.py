@@ -13,6 +13,7 @@ from models import (
     UserRole, InviteStatus
 )
 from utils.audit import record
+from utils.action_otp import require_recent_action_otp
 from middleware.auth import (
     get_current_user, get_current_org_id, require_org_role
 )
@@ -164,6 +165,7 @@ async def remove_member(
     org_id: int,
     member_id: int,
     current_user: dict = Depends(get_current_user),
+    _recent_otp: None = Depends(require_recent_action_otp),
     db: Session = Depends(get_db)
 ):
     """Remove a member from organization (owner only)"""

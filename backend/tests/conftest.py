@@ -52,9 +52,11 @@ def register(client, email, name="Test User", password="TestPass123"):
 
 
 def login(client, email, password="TestPass123"):
-    res = client.post("/api/auth/login", json={"email": email, "password": password})
+    res = client.post("/api/auth/login", json={"identifier": email, "password": password})
     assert res.status_code == 200, res.text
-    return res.json()["access_token"]
+    body = res.json()
+    assert not body.get("otp_required"), "login unexpectedly required an OTP challenge"
+    return body["access_token"]
 
 
 def auth(token):

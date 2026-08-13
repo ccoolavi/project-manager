@@ -5,6 +5,8 @@ import { useOrg } from '../context/OrgContext'
 import { useAuth } from '../context/AuthContext'
 import { ROLE_LABELS } from '../config'
 import { hasRole } from '../utils/permissions'
+import { useSensitiveAction } from '../hooks/useSensitiveAction'
+import SensitiveActionModal from './SensitiveActionModal'
 
 const INVITABLE_ROLES = ['admin', 'editor', 'member', 'viewer']
 
@@ -18,6 +20,7 @@ export default function MemberManager() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const sensitiveAction = useSensitiveAction()
 
   const canManage = hasRole('owner', 'admin')
 
@@ -73,10 +76,15 @@ export default function MemberManager() {
   const remove = async (memberId, name) => {
     setError('')
     setNotice('')
+    // The whole flow — not just the API call — is what guard() retries once
+    // the emailed code is confirmed, so the success side effects happen
+    // whichever path (immediate or after verification) actually deletes.
     try {
-      await api.delete(`/api/orgs/${currentOrg.id}/members/${memberId}`)
-      setNotice(`${name} was removed from ${currentOrg.name}.`)
-      await load()
+      await sensitiveAction.guard(async () => {
+        await api.delete(`/api/orgs/${currentOrg.id}/members/${memberId}`)
+        setNotice(`${name} was removed from ${currentOrg.name}.`)
+        await load()
+      })
     } catch (err) {
       setError(
         err?.response?.status === 403
@@ -208,6 +216,8 @@ export default function MemberManager() {
           )}
         </div>
       )}
+
+      <SensitiveActionModal {...sensitiveAction} />
     </div>
   )
 }

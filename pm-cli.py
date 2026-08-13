@@ -134,7 +134,7 @@ def cmd_health(args):
 
 
 def cmd_login(args):
-    res = request("POST", "/api/auth/login", {"email": args.email, "password": args.password})
+    res = request("POST", "/api/auth/login", {"identifier": args.email, "password": args.password})
     save_token(res["access_token"])
     info(f"signed in as {res['user']['email']}")
     emit({"email": res["user"]["email"], "name": res["user"]["name"]})

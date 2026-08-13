@@ -14,7 +14,7 @@ TA=$(echo "$RA" | python3 -c "import sys,json;print(json.load(sys.stdin).get('ac
 [ -n "$TA" ] && chk 1 1 "user A registered, JWT issued" || { echo "  FAIL register: $RA"; exit 1; }
 
 echo "== 2. Login user A =="
-RL=$(curl -s -m 20 -X POST "$API/api/auth/login" -H "$J" -H "$O" -d "{\"email\":\"alice$STAMP@test.com\",\"password\":\"TestPass123\"}")
+RL=$(curl -s -m 20 -X POST "$API/api/auth/login" -H "$J" -H "$O" -d "{\"identifier\":\"alice$STAMP@test.com\",\"password\":\"TestPass123\"}")
 TA=$(echo "$RL" | python3 -c "import sys,json;print(json.load(sys.stdin).get('access_token',''))")
 [ -n "$TA" ] && chk 1 1 "login returns JWT" || chk 1 0 "login returns JWT"
 AH="Authorization: Bearer $TA"
@@ -24,7 +24,7 @@ OA=$(curl -s -m 20 -X POST "$API/api/orgs" -H "$J" -H "$O" -H "$AH" -d '{"name":
 OAID=$(echo "$OA" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")
 [ -n "$OAID" ] && chk 1 1 "org created (id=$OAID)" || { echo "  FAIL org: $OA"; exit 1; }
 # re-login so the JWT carries org_id/role
-TA=$(curl -s -m 20 -X POST "$API/api/auth/login" -H "$J" -d "{\"email\":\"alice$STAMP@test.com\",\"password\":\"TestPass123\"}" | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+TA=$(curl -s -m 20 -X POST "$API/api/auth/login" -H "$J" -d "{\"identifier\":\"alice$STAMP@test.com\",\"password\":\"TestPass123\"}" | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
 AH="Authorization: Bearer $TA"
 
 echo "== 4. Project =="
@@ -68,11 +68,11 @@ chk 1 "$N" "kaizen log listed"
 
 echo "== 10. TENANT ISOLATION — user B must not reach org A's data =="
 curl -s -m 20 -o /dev/null -X POST "$API/api/auth/register" -H "$J" -d "{\"name\":\"Bob\",\"email\":\"bob$STAMP@test.com\",\"password\":\"TestPass123\",\"confirm_password\":\"TestPass123\"}"
-TB=$(curl -s -m 20 -X POST "$API/api/auth/login" -H "$J" -d "{\"email\":\"bob$STAMP@test.com\",\"password\":\"TestPass123\"}" | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+TB=$(curl -s -m 20 -X POST "$API/api/auth/login" -H "$J" -d "{\"identifier\":\"bob$STAMP@test.com\",\"password\":\"TestPass123\"}" | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
 BH="Authorization: Bearer $TB"
 OB=$(curl -s -m 20 -X POST "$API/api/orgs" -H "$J" -H "$BH" -d '{"name":"Bob Inc","description":"t"}')
 OBID=$(echo "$OB" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")
-TB=$(curl -s -m 20 -X POST "$API/api/auth/login" -H "$J" -d "{\"email\":\"bob$STAMP@test.com\",\"password\":\"TestPass123\"}" | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+TB=$(curl -s -m 20 -X POST "$API/api/auth/login" -H "$J" -d "{\"identifier\":\"bob$STAMP@test.com\",\"password\":\"TestPass123\"}" | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
 BH="Authorization: Bearer $TB"
 
 CODE=$(curl -s -m 20 -o /dev/null -w "%{http_code}" "$API/api/orgs/$OAID/projects" -H "$BH")

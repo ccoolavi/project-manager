@@ -9,7 +9,7 @@ logger = logging.getLogger("kaizenpm")
 
 from config import settings
 from database import engine, Base
-from routers import auth, organizations, projects, tasks, habits, kaizen, time, otp, ikigai, invites, comments, search
+from routers import auth, organizations, projects, tasks, habits, kaizen, time, otp, ikigai, invites, comments, search, email_otp
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -52,6 +52,7 @@ app.include_router(ikigai.router)
 app.include_router(invites.router)
 app.include_router(comments.router)
 app.include_router(search.router)
+app.include_router(email_otp.router)
 
 # Root endpoint
 @app.get("/")

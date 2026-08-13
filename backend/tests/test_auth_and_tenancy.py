@@ -44,7 +44,7 @@ def test_mismatched_passwords_are_rejected(client):
 def test_wrong_password_is_rejected(client):
     register(client, "pw@test.com")
     res = client.post(
-        "/api/auth/login", json={"email": "pw@test.com", "password": "WrongPass123"}
+        "/api/auth/login", json={"identifier": "pw@test.com", "password": "WrongPass123"}
     )
     assert res.status_code == 401
 
@@ -63,7 +63,7 @@ def test_long_password_does_not_crash_bcrypt(client):
     )
     assert res.status_code == 200
     res = client.post(
-        "/api/auth/login", json={"email": "long@test.com", "password": long_password}
+        "/api/auth/login", json={"identifier": "long@test.com", "password": long_password}
     )
     assert res.status_code == 200
 

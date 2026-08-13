@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2, FolderOpen, Folder } from 'lucide-react'
 import api from '../utils/api'
 import { useOrg } from '../context/OrgContext'
+import { useSensitiveAction } from '../hooks/useSensitiveAction'
+import SensitiveActionModal from './SensitiveActionModal'
 
 export default function ProjectList({ selectedProjectId, selectedSubProjectId, onSelectProject }) {
   const { currentOrg } = useOrg()
@@ -11,6 +13,7 @@ export default function ProjectList({ selectedProjectId, selectedSubProjectId, o
   const [newSectionName, setNewSectionName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const sensitiveAction = useSensitiveAction()
 
   useEffect(() => {
     fetchProjects()
@@ -98,13 +101,14 @@ export default function ProjectList({ selectedProjectId, selectedSubProjectId, o
   const deleteProject = async (projectId) => {
     setError('')
     try {
-      await api.delete(`/api/orgs/${currentOrg.id}/projects/${projectId}`)
-      const remaining = projects.filter(p => p.id !== projectId)
-      setProjects(remaining)
-      if (selectedProjectId === projectId) {
-        setSubProjects([])
-        onSelectProject(null, null)
-      }
+      await sensitiveAction.guard(async () => {
+        await api.delete(`/api/orgs/${currentOrg.id}/projects/${projectId}`)
+        setProjects((current) => current.filter((p) => p.id !== projectId))
+        if (selectedProjectId === projectId) {
+          setSubProjects([])
+          onSelectProject(null, null)
+        }
+      })
     } catch (err) {
       setError(
         err?.response?.status === 403
@@ -225,6 +229,8 @@ export default function ProjectList({ selectedProjectId, selectedSubProjectId, o
           </div>
         </div>
       )}
+
+      <SensitiveActionModal {...sensitiveAction} />
     </div>
   )
 }

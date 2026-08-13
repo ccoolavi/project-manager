@@ -1,7 +1,9 @@
 import { z } from 'zod'
 
+// Login accepts either an email address or a phone number, so this can't
+// require email() formatting the way registration does.
 export const loginSchema = z.object({
-  email: z.string().email('Invalid email'),
+  identifier: z.string().min(3, 'Enter your email or phone number'),
   password: z.string().min(1, 'Password required')
 })
 

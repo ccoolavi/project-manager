@@ -5,14 +5,18 @@ from models import UserRole, TaskStatus, TaskPriority, ProjectStatus, InviteStat
 
 # User Schemas
 class UserLogin(BaseModel):
-    email: EmailStr
+    # Accepts either an email address or a phone number; EmailStr would reject
+    # phone-number logins outright.
+    identifier: str
     password: str
+    device_id: Optional[str] = None
 
 class UserRegister(BaseModel):
     name: str
     email: EmailStr
     password: str = Field(..., min_length=8)
     confirm_password: str
+    device_id: Optional[str] = None
 
 class UserResponse(BaseModel):
     id: int
@@ -260,3 +264,22 @@ class TaskCommentResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# Email OTP Schemas
+class LoginChallengeResponse(BaseModel):
+    """Returned instead of tokens when a login must clear an email-OTP step."""
+    otp_required: bool = True
+    reason: str
+    message: str
+
+class VerifyLoginOTP(BaseModel):
+    identifier: str
+    code: str
+    device_id: Optional[str] = None
+
+class RequestActionOTP(BaseModel):
+    pass
+
+class VerifyActionOTP(BaseModel):
+    code: str

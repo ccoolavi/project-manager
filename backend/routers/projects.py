@@ -8,6 +8,7 @@ from models import Project, SubProject, Organization, OrganizationMember
 from middleware.auth import get_current_user, get_current_org_id
 from utils.tenancy import resolve_project
 from utils.audit import record
+from utils.action_otp import require_recent_action_otp
 
 router = APIRouter(prefix="/api/orgs/{org_id}/projects", tags=["projects"])
 
@@ -141,6 +142,7 @@ async def delete_project(
     org_id: int,
     project_id: int,
     current_user: dict = Depends(get_current_user),
+    _recent_otp: None = Depends(require_recent_action_otp),
     db: Session = Depends(get_db)
 ):
     """Delete project"""

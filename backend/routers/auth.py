@@ -1,15 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from typing import Optional
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from database import get_db
 from schemas import UserLogin, UserRegister, TokenResponse, UserResponse
-from models import User
+from models import TrustedDevice, User
 from utils.security import (
     hash_password, verify_password, create_access_token,
     create_refresh_token, decode_token
 )
+from utils.email import send_email
+from utils.email_otp import CODE_TTL_MINUTES, is_rate_limited, issue_code
 from config import settings
 from middleware.auth import get_current_user
 
@@ -45,6 +47,13 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
+    # Creating the account is itself proof of control over this device, so it
+    # is trusted immediately — the very next login should not have to clear an
+    # email-OTP challenge for a device it was just created on.
+    if user_data.device_id:
+        db.add(TrustedDevice(user_id=new_user.id, device_id=user_data.device_id))
+        db.commit()
+
     # Create tokens (without org_id yet, user must create/join org first)
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
@@ -60,16 +69,29 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
         user=UserResponse.from_orm(new_user)
     )
 
-@router.post("/login", response_model=TokenResponse)
-async def login(credentials: UserLogin, db: Session = Depends(get_db)):
-    """Login with email and password"""
+@router.post("/login")
+async def login(credentials: UserLogin, request: Request, db: Session = Depends(get_db)):
+    """Login with an email address or phone number, and a password.
 
-    # Find user
-    user = db.query(User).filter(User.email == credentials.email).first()
+    A device the account has never signed in from before must clear an
+    email-OTP challenge; the endpoint then returns ``{otp_required: true}``
+    instead of tokens, and the client completes the login via
+    ``POST /api/auth/otp/email/verify-login``. Two situations skip this
+    entirely: the account has no email on file (there is nothing to send a
+    code to), or the caller sent no ``device_id`` at all — the CLI and other
+    non-browser API clients never send one, and gating those on a UI-driven
+    email challenge would make automation impossible rather than more secure.
+    """
+    identifier = credentials.identifier.strip()
+    user = (
+        db.query(User)
+        .filter((User.email == identifier) | (User.phone == identifier))
+        .first()
+    )
     if not user or not verify_password(credentials.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
+            detail="Invalid email/phone or password"
         )
 
     if not user.is_active:
@@ -77,6 +99,53 @@ async def login(credentials: UserLogin, db: Session = Depends(get_db)):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is inactive"
         )
+
+    device_id = credentials.device_id
+
+    if device_id and user.email:
+        trusted = (
+            db.query(TrustedDevice)
+            .filter(TrustedDevice.user_id == user.id, TrustedDevice.device_id == device_id)
+            .first()
+        )
+        if trusted:
+            trusted.last_seen_at = datetime.utcnow()
+            db.commit()
+        else:
+            if is_rate_limited(db, user.id, "login_device"):
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Too many codes requested. Please wait a few minutes and try again.",
+                )
+            code = issue_code(db, user.id, "login_device")
+            delivered = send_email(
+                user.email,
+                "KaizenPM sign-in code",
+                f"Someone is signing in to KaizenPM from a new device.\n\n"
+                f"Your code is {code}. It expires in {CODE_TTL_MINUTES} minutes.\n\n"
+                "If this was not you, change your password.",
+            )
+            return {
+                "otp_required": True,
+                "reason": "new_device",
+                "message": (
+                    "We emailed you a code to confirm this new device."
+                    if delivered
+                    else "This looks like a new device, but we could not send a confirmation email."
+                ),
+            }
+    elif device_id:
+        # No email on file — nothing to challenge with, so just record the
+        # device for consistency; it plays no further role until an email
+        # exists.
+        existing = (
+            db.query(TrustedDevice)
+            .filter(TrustedDevice.user_id == user.id, TrustedDevice.device_id == device_id)
+            .first()
+        )
+        if not existing:
+            db.add(TrustedDevice(user_id=user.id, device_id=device_id))
+            db.commit()
 
     # Get user's first organization (if any)
     org = None
