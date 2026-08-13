@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime, timedelta
@@ -70,7 +70,12 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     )
 
 @router.post("/login")
-async def login(credentials: UserLogin, request: Request, db: Session = Depends(get_db)):
+async def login(
+    credentials: UserLogin,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     """Login with an email address or phone number, and a password.
 
     A device the account has never signed in from before must clear an
@@ -117,8 +122,13 @@ async def login(credentials: UserLogin, request: Request, db: Session = Depends(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail="Too many codes requested. Please wait a few minutes and try again.",
                 )
+            # The code exists in the database the instant it's issued; only
+            # the SMTP round trip (which can take several seconds) is pushed
+            # to the background, so the OTP-entry screen appears immediately
+            # instead of leaving the user staring at a spinner.
             code = issue_code(db, user.id, "login_device")
-            delivered = send_email(
+            background_tasks.add_task(
+                send_email,
                 user.email,
                 "KaizenPM sign-in code",
                 f"Someone is signing in to KaizenPM from a new device.\n\n"
@@ -128,11 +138,7 @@ async def login(credentials: UserLogin, request: Request, db: Session = Depends(
             return {
                 "otp_required": True,
                 "reason": "new_device",
-                "message": (
-                    "We emailed you a code to confirm this new device."
-                    if delivered
-                    else "This looks like a new device, but we could not send a confirmation email."
-                ),
+                "message": "We're emailing you a code to confirm this new device.",
             }
     elif device_id:
         # No email on file — nothing to challenge with, so just record the

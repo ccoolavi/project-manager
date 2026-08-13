@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -74,6 +74,7 @@ async def verify_login_otp(payload: VerifyLoginOTP, db: Session = Depends(get_db
 
 @router.post("/request-action")
 async def request_action_otp(
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -81,6 +82,12 @@ async def request_action_otp(
 
     Tells the client to proceed without a code when the account has no email
     on file — there is nothing to send the code to.
+
+    The code is generated and stored before responding, so it is valid the
+    instant the client sees this response; only the SMTP round trip itself
+    (which can take several seconds) is pushed to a background task, so the
+    caller — in practice, a modal the user is staring at — doesn't have to
+    wait on it.
     """
     user_id = int(current_user.get("sub"))
     user = db.query(User).filter(User.id == user_id).first()
@@ -97,17 +104,14 @@ async def request_action_otp(
         )
 
     code = issue_code(db, user.id, "sensitive_action")
-    delivered = send_email(
+    background_tasks.add_task(
+        send_email,
         user.email,
         "KaizenPM verification code",
         f"Your verification code is {code}. It expires in {CODE_TTL_MINUTES} minutes.\n\n"
         "If you did not request this, you can ignore this email.",
     )
-    return {
-        "required": True,
-        "delivered": delivered,
-        "message": "We emailed you a code." if delivered else "Could not send the email right now.",
-    }
+    return {"required": True, "message": "We're emailing you a code now."}
 
 
 @router.post("/verify-action")
