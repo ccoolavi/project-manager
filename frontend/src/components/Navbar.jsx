@@ -1,6 +1,7 @@
 import { useAuth } from '../context/AuthContext'
 import SyncStatus from './SyncStatus'
 import GlobalSearch from './GlobalSearch'
+import NotificationBell from './NotificationBell'
 import { useOrg } from '../context/OrgContext'
 import { LogOut } from 'lucide-react'
 
@@ -29,6 +30,7 @@ export default function Navbar() {
       <GlobalSearch />
 
       <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+        <NotificationBell />
         <SyncStatus />
         {/* The name is a nicety, not information the user needs on a phone. */}
         <span className="hidden md:inline text-slate-300 truncate max-w-[12rem]">

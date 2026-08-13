@@ -7,6 +7,7 @@ from schemas import TaskCreate, TaskUpdate, TaskResponse
 from models import Task
 from middleware.auth import get_current_user
 from utils.audit import record
+from utils.notifications import notify
 from utils.tenancy import (
     require_membership,
     require_role,
@@ -47,6 +48,13 @@ async def create_task(
     db.refresh(new_task)
 
     record(db, org_id, user_id, "created", "task", new_task.id, {"title": new_task.title})
+
+    if new_task.assignee_id and new_task.assignee_id != user_id:
+        notify(
+            db, new_task.assignee_id, org_id, "task_assigned",
+            "New task assigned to you", f'You were assigned "{new_task.title}"',
+            "task", new_task.id,
+        )
 
     return TaskResponse.from_orm(new_task)
 
@@ -109,6 +117,9 @@ async def update_task(
         task.status = task_data.status
     if task_data.priority:
         task.priority = task_data.priority
+    assignee_changed = (
+        task_data.assignee_id is not None and task_data.assignee_id != task.assignee_id
+    )
     if task_data.assignee_id is not None:
         task.assignee_id = task_data.assignee_id
     if task_data.due_date is not None:
@@ -116,6 +127,13 @@ async def update_task(
 
     db.commit()
     db.refresh(task)
+
+    if assignee_changed and task.assignee_id and task.assignee_id != user_id:
+        notify(
+            db, task.assignee_id, org_id, "task_assigned",
+            "New task assigned to you", f'You were assigned "{task.title}"',
+            "task", task.id,
+        )
 
     return TaskResponse.from_orm(task)
 

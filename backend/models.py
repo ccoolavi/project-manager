@@ -313,3 +313,22 @@ class EmailOTP(Base):
     expires_at = Column(DateTime)
     verified_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Notification(Base):
+    """In-app notifications, delivered by polling rather than a push channel
+    — see main_agent_prompt.md Part B3: polling every 30s is sufficient for
+    this self-hosted, single-server setup and needs no WebSocket machinery."""
+
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), index=True)
+    type = Column(String)  # task_assigned | comment_added | invite_received
+    title = Column(String)
+    message = Column(Text)
+    entity_type = Column(String, nullable=True)
+    entity_id = Column(Integer, nullable=True)
+    read_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -8,6 +8,7 @@ from models import TaskComment
 from middleware.auth import get_current_user
 from utils.tenancy import require_membership, resolve_task
 from utils.audit import record
+from utils.notifications import notify
 
 router = APIRouter(
     prefix="/api/orgs/{org_id}/projects/{project_id}/tasks/{sub_project_id}/{task_id}/comments",
@@ -64,7 +65,12 @@ async def create_comment(
 
     record(db, org_id, user_id, "commented", "task", task_id, {"title": task.title})
 
-    # B3 wires a Notification for the task's assignee here.
+    if task.assignee_id and task.assignee_id != user_id:
+        notify(
+            db, task.assignee_id, org_id, "comment_added",
+            "New comment", f'New comment on "{task.title}"',
+            "task", task_id,
+        )
 
     return TaskCommentResponse.from_orm(comment)
 

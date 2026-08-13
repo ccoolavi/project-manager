@@ -283,3 +283,18 @@ class RequestActionOTP(BaseModel):
 
 class VerifyActionOTP(BaseModel):
     code: str
+
+# Notification Schemas
+class NotificationResponse(BaseModel):
+    id: int
+    org_id: Optional[int] = None
+    type: str
+    title: str
+    message: str
+    entity_type: Optional[str] = None
+    entity_id: Optional[int] = None
+    read_at: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

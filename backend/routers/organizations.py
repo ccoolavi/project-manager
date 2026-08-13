@@ -14,6 +14,7 @@ from models import (
 )
 from utils.audit import record
 from utils.action_otp import require_recent_action_otp
+from utils.notifications import notify
 from middleware.auth import (
     get_current_user, get_current_org_id, require_org_role
 )
@@ -154,6 +155,13 @@ async def add_member(
         db.add(member)
         new_invite.status = InviteStatus.accepted
         db.commit()
+
+        org_name = db.query(Organization).filter(Organization.id == org_id).first().name
+        notify(
+            db, existing_user.id, org_id, "invite_received",
+            "Added to an organisation", f'You were added to "{org_name}"',
+            "organization", org_id,
+        )
 
     record(db, org_id, user_id, "invited", "member", None,
            {"email": invite.email, "role": invite.role.value if hasattr(invite.role, "value") else invite.role})
