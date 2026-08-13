@@ -278,6 +278,7 @@ export default function KanbanBoard({ projectId, subProjectId }) {
           <button
             disabled={bulkBusy}
             onClick={() => runBulk('delete')}
+            aria-label="Delete selected tasks"
             className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 disabled:opacity-50 text-red-300 text-sm rounded flex items-center gap-1"
           >
             <Trash2 size={14} /> Delete
