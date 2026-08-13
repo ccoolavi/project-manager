@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from database import get_db
-from schemas import TaskCreate, TaskUpdate, TaskResponse, TaskDependencyCreate, TaskDependencyResponse
-from models import Project, SubProject, Task, TaskDependency
+from schemas import TaskCreate, TaskUpdate, TaskResponse, TaskDependencyCreate, TaskDependencyResponse, BulkTaskAction
+from models import Project, SubProject, Task, TaskDependency, TaskPriority, TaskStatus
 from middleware.auth import get_current_user
 from utils.audit import record
 from utils.notifications import notify
@@ -315,3 +315,82 @@ async def list_all_org_tasks(
         }
         for task, project_id, project_name in rows
     ]
+
+
+@org_router.post("/bulk")
+async def bulk_task_action(
+    org_id: int,
+    body: BulkTaskAction,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Apply one action to many tasks at once.
+
+    Every task_id is independently proved to belong to this org via the same
+    sub_project -> project chain every other route in this file walks, rather
+    than trusting the caller — a task from another org silently slipping
+    through here would be the cross-org leak this codebase has already had to
+    fix once (see utils/tenancy.py).
+    """
+    user_id = int(current_user.get("sub"))
+    member = require_membership(db, org_id, user_id)
+
+    if body.action == "delete":
+        require_role(member, "owner", "admin", "editor")
+    else:
+        require_role(member, "owner", "admin", "editor", "member")
+
+    if body.action not in ("update_status", "assign", "set_priority", "delete"):
+        raise HTTPException(status_code=400, detail=f"Unknown action: {body.action}")
+
+    if body.action == "update_status" and body.value not in [s.value for s in TaskStatus]:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {body.value}")
+    if body.action == "set_priority" and body.value not in [p.value for p in TaskPriority]:
+        raise HTTPException(status_code=400, detail=f"Invalid priority: {body.value}")
+
+    assignee_id = None
+    if body.action == "assign":
+        assignee_id = int(body.value) if body.value else None
+
+    updated = 0
+    failed = []
+    newly_assigned_task_titles = []
+
+    for task_id in body.task_ids:
+        task = (
+            db.query(Task)
+            .join(SubProject, Task.sub_project_id == SubProject.id)
+            .join(Project, SubProject.project_id == Project.id)
+            .filter(Task.id == task_id, Project.organization_id == org_id)
+            .first()
+        )
+        if not task:
+            failed.append({"task_id": task_id, "reason": "not found in this organisation"})
+            continue
+
+        if body.action == "delete":
+            db.delete(task)
+        elif body.action == "update_status":
+            task.status = body.value
+        elif body.action == "set_priority":
+            task.priority = body.value
+        elif body.action == "assign":
+            task.assignee_id = assignee_id
+            if assignee_id and assignee_id != user_id:
+                newly_assigned_task_titles.append(task.title)
+
+        updated += 1
+
+    db.commit()
+
+    # One summary notification per bulk-assign, not one per task — assigning
+    # twenty tasks at once should not flood the assignee with twenty pings.
+    if newly_assigned_task_titles:
+        notify(
+            db, assignee_id, org_id, "task_assigned",
+            "Tasks assigned to you",
+            f"You were assigned {len(newly_assigned_task_titles)} task(s) in bulk.",
+            "task", None,
+        )
+
+    return {"updated": updated, "failed": failed}

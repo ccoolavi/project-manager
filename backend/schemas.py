@@ -354,3 +354,9 @@ class SprintResponse(BaseModel):
 
 class SprintTaskAdd(BaseModel):
     task_id: int
+
+# Bulk Task Action Schema
+class BulkTaskAction(BaseModel):
+    task_ids: List[int]
+    action: str  # update_status | assign | set_priority | delete
+    value: Optional[str] = None  # status/priority string, user_id string, or unused for delete
