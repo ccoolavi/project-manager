@@ -320,3 +320,37 @@ class TaskDependencyResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# Sprint Schemas
+class SprintCreate(BaseModel):
+    name: str
+    goal: Optional[str] = None
+    start_date: datetime
+    end_date: datetime
+    status: str = "planning"
+
+class SprintUpdate(BaseModel):
+    name: Optional[str] = None
+    goal: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    status: Optional[str] = None
+
+class SprintResponse(BaseModel):
+    id: int
+    project_id: int
+    name: str
+    goal: Optional[str] = None
+    start_date: datetime
+    end_date: datetime
+    status: str
+    created_at: datetime
+    task_count: int = 0
+    total_points: int = 0
+    completed_points: int = 0
+
+    class Config:
+        from_attributes = True
+
+class SprintTaskAdd(BaseModel):
+    task_id: int

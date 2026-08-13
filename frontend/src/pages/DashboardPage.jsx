@@ -15,6 +15,7 @@ import Ikigai from '../components/Ikigai'
 import WorkloadView from '../components/WorkloadView'
 import AnalyticsPage from './AnalyticsPage'
 import GanttView from '../components/GanttView'
+import SprintBoard from '../components/SprintBoard'
 import PendingInvites from '../components/PendingInvites'
 import ActivityLog from '../components/ActivityLog'
 import api from '../utils/api'
@@ -24,6 +25,7 @@ const TAB_TITLES = {
   tasks: 'Tasks',
   projects: 'Projects',
   timeline: 'Timeline',
+  sprints: 'Sprints',
   habits: 'Habits',
   time: 'Time',
   kaizen: 'Kaizen',
@@ -167,6 +169,11 @@ export default function DashboardPage() {
                 selectedSubProjectId={selectedSubProjectId}
                 onSelectProject={handleSelectProject}
               />
+            )}
+
+            {/* Sprints Tab */}
+            {activeTab === 'sprints' && (
+              <SprintBoard />
             )}
 
             {/* Habits Tab */}

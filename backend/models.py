@@ -366,3 +366,31 @@ class Notification(Base):
     entity_id = Column(Integer, nullable=True)
     read_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Sprint(Base):
+    __tablename__ = "sprints"
+
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), index=True)
+    name = Column(String)
+    goal = Column(Text, nullable=True)
+    start_date = Column(DateTime)
+    end_date = Column(DateTime)
+    status = Column(String, default="planning")  # planning | active | completed
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    tasks = relationship("SprintTask", back_populates="sprint", cascade="all, delete-orphan")
+
+
+class SprintTask(Base):
+    __tablename__ = "sprint_tasks"
+
+    id = Column(Integer, primary_key=True)
+    sprint_id = Column(Integer, ForeignKey("sprints.id"), index=True)
+    # unique: a task can be in at most one sprint at a time.
+    task_id = Column(Integer, ForeignKey("tasks.id"), unique=True, index=True)
+
+    sprint = relationship("Sprint", back_populates="tasks")
+    task = relationship("Task")
