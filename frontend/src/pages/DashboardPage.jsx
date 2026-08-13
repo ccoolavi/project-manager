@@ -12,6 +12,7 @@ import TimeLogger from '../components/TimeLogger'
 import KaizenLog from '../components/KaizenLog'
 import MemberManager from '../components/MemberManager'
 import Ikigai from '../components/Ikigai'
+import WorkloadView from '../components/WorkloadView'
 import PendingInvites from '../components/PendingInvites'
 import ActivityLog from '../components/ActivityLog'
 import api from '../utils/api'
@@ -24,6 +25,7 @@ const TAB_TITLES = {
   time: 'Time',
   kaizen: 'Kaizen',
   ikigai: 'Purpose',
+  workload: 'Workload',
   settings: 'Settings'
 }
 
@@ -176,6 +178,11 @@ export default function DashboardPage() {
             {/* Ikigai / Purpose Tab */}
             {activeTab === 'ikigai' && (
               <Ikigai />
+            )}
+
+            {/* Workload Tab */}
+            {activeTab === 'workload' && (
+              <WorkloadView />
             )}
 
             {/* Settings Tab */}

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import List
@@ -10,11 +11,12 @@ from schemas import (
 )
 from models import (
     Organization, User, OrganizationMember, OrganizationInvite,
-    UserRole, InviteStatus
+    Project, SubProject, Task, UserRole, InviteStatus
 )
 from utils.audit import record
 from utils.action_otp import require_recent_action_otp
 from utils.notifications import notify
+from utils.tenancy import require_membership
 from middleware.auth import (
     get_current_user, get_current_org_id, require_org_role
 )
@@ -289,4 +291,55 @@ async def list_audit_logs(
             "actor": names.get(e.user_id, "Someone"),
         }
         for e in entries
+    ]
+
+
+@router.get("/{org_id}/workload")
+async def get_workload(
+    org_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Each member's assigned tasks, grouped by status.
+
+    Tasks have no direct organization_id, so counts are aggregated through the
+    same task -> sub_project -> project -> organization join used everywhere
+    else in this codebase, filtered to this org's members only.
+    """
+    user_id = int(current_user.get("sub"))
+    require_membership(db, org_id, user_id)
+
+    members = (
+        db.query(OrganizationMember)
+        .filter(OrganizationMember.organization_id == org_id)
+        .all()
+    )
+    member_ids = [m.user_id for m in members]
+    names = {m.user_id: (m.user.name or m.user.email) for m in members}
+
+    rows = (
+        db.query(Task.assignee_id, Task.status, func.count(Task.id))
+        .join(SubProject, Task.sub_project_id == SubProject.id)
+        .join(Project, SubProject.project_id == Project.id)
+        .filter(Project.organization_id == org_id, Task.assignee_id.in_(member_ids))
+        .group_by(Task.assignee_id, Task.status)
+        .all()
+    )
+
+    counts = {uid: {"todo": 0, "in_progress": 0, "review": 0, "done": 0} for uid in member_ids}
+    for assignee_id, status_value, count in rows:
+        status_key = status_value.value if hasattr(status_value, "value") else status_value
+        counts[assignee_id][status_key] = count
+
+    return [
+        {
+            "user_id": uid,
+            "user_name": names[uid],
+            "todo": counts[uid]["todo"],
+            "in_progress": counts[uid]["in_progress"],
+            "review": counts[uid]["review"],
+            "done": counts[uid]["done"],
+            "total": sum(counts[uid].values()),
+        }
+        for uid in member_ids
     ]

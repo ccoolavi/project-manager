@@ -90,7 +90,11 @@ export default defineConfig({
           react: ['react', 'react-dom'],
           router: ['react-router-dom'],
           vendor: ['axios', 'zod'],
-          icons: ['lucide-react']
+          icons: ['lucide-react'],
+          // recharts alone is the single biggest dependency in the app; split
+          // out so pages that never chart anything don't pay for it, and so it
+          // caches independently of application code that changes far more often.
+          charts: ['recharts']
         }
       }
     }
