@@ -12,6 +12,7 @@ from models import (
     Organization, User, OrganizationMember, OrganizationInvite,
     UserRole, InviteStatus
 )
+from utils.audit import record
 from middleware.auth import (
     get_current_user, get_current_org_id, require_org_role
 )
@@ -153,6 +154,9 @@ async def add_member(
         new_invite.status = InviteStatus.accepted
         db.commit()
 
+    record(db, org_id, user_id, "invited", "member", None,
+           {"email": invite.email, "role": invite.role.value if hasattr(invite.role, "value") else invite.role})
+
     return {"message": f"Invitation sent to {invite.email}"}
 
 @router.delete("/{org_id}/members/{member_id}")
@@ -178,8 +182,11 @@ async def remove_member(
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
 
+    removed_user_id = member.user_id
     db.delete(member)
     db.commit()
+
+    record(db, org_id, user_id, "removed", "member", removed_user_id)
 
     return {"message": "Member removed"}
 
@@ -235,3 +242,41 @@ async def accept_invite(
     db.commit()
 
     return {"message": "Invite accepted"}
+
+
+@router.get("/{org_id}/audit-logs")
+async def list_audit_logs(
+    org_id: int,
+    limit: int = 100,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Recent activity in this organisation. Owners and admins only."""
+    from models import AuditLog, User as UserModel
+    from utils.tenancy import require_membership, require_role
+
+    user_id = int(current_user.get("sub"))
+    member = require_membership(db, org_id, user_id)
+    require_role(member, "owner", "admin")
+
+    entries = (
+        db.query(AuditLog)
+        .filter(AuditLog.organization_id == org_id)
+        .order_by(AuditLog.timestamp.desc())
+        .limit(min(limit, 500))
+        .all()
+    )
+
+    names = {u.id: u.name or u.email for u in db.query(UserModel).all()}
+    return [
+        {
+            "id": e.id,
+            "action": e.action,
+            "entity_type": e.entity_type,
+            "entity_id": e.entity_id,
+            "changes": e.changes,
+            "timestamp": e.timestamp,
+            "actor": names.get(e.user_id, "Someone"),
+        }
+        for e in entries
+    ]

@@ -120,7 +120,7 @@ export default function KanbanBoard({ projectId, subProjectId }) {
   if (!subProjectId) {
     return (
       <div className="text-slate-400 text-sm">
-        Pick a project on the left to see its tasks, or create one to get started.
+        Pick a project to see its tasks, or create one to get started.
       </div>
     )
   }

@@ -12,6 +12,8 @@ import TimeLogger from '../components/TimeLogger'
 import KaizenLog from '../components/KaizenLog'
 import MemberManager from '../components/MemberManager'
 import Ikigai from '../components/Ikigai'
+import PendingInvites from '../components/PendingInvites'
+import ActivityLog from '../components/ActivityLog'
 import api from '../utils/api'
 
 // Tab ids are lowercase slugs; these are the words the user should actually see.
@@ -111,6 +113,8 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            <PendingInvites />
+
             {/* Tasks Tab */}
             {activeTab === 'tasks' && (
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 min-w-0">
@@ -163,6 +167,8 @@ export default function DashboardPage() {
             {activeTab === 'settings' && (
               <div className="space-y-6">
                 <MemberManager />
+
+                <ActivityLog />
 
                 <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
                   <h2 className="text-xl font-bold text-white mb-4">Organization Settings</h2>

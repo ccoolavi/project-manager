@@ -6,6 +6,7 @@ from database import get_db
 from schemas import TaskCreate, TaskUpdate, TaskResponse
 from models import Task
 from middleware.auth import get_current_user
+from utils.audit import record
 from utils.tenancy import (
     require_membership,
     require_role,
@@ -44,6 +45,8 @@ async def create_task(
     db.add(new_task)
     db.commit()
     db.refresh(new_task)
+
+    record(db, org_id, user_id, "created", "task", new_task.id, {"title": new_task.title})
 
     return TaskResponse.from_orm(new_task)
 
@@ -132,7 +135,10 @@ async def delete_task(
     require_role(member, "owner", "admin", "editor")
     task = resolve_task(db, org_id, project_id, sub_project_id, task_id)
 
+    title = task.title
     db.delete(task)
     db.commit()
+
+    record(db, org_id, user_id, "deleted", "task", task_id, {"title": title})
 
     return {"message": "Task deleted"}

@@ -7,6 +7,7 @@ from schemas import ProjectCreate, ProjectUpdate, ProjectResponse, SubProjectCre
 from models import Project, SubProject, Organization, OrganizationMember
 from middleware.auth import get_current_user, get_current_org_id
 from utils.tenancy import resolve_project
+from utils.audit import record
 
 router = APIRouter(prefix="/api/orgs/{org_id}/projects", tags=["projects"])
 
@@ -40,6 +41,8 @@ async def create_project(
     db.add(new_project)
     db.commit()
     db.refresh(new_project)
+
+    record(db, org_id, user_id, "created", "project", new_project.id, {"name": new_project.name})
 
     return ProjectResponse.from_orm(new_project)
 
@@ -160,8 +163,11 @@ async def delete_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    name = project.name
     db.delete(project)
     db.commit()
+
+    record(db, org_id, user_id, "deleted", "project", project_id, {"name": name})
 
     return {"message": "Project deleted"}
 
