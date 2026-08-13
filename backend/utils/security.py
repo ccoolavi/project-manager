@@ -1,18 +1,30 @@
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
-from passlib.context import CryptContext
+import bcrypt
 from jose import JWTError, jwt
 from config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt only consumes the first 72 bytes of input and raises on anything longer,
+# so truncate explicitly rather than letting the library error out. passlib is not
+# used here because passlib 1.7.x is incompatible with bcrypt 4.x.
+_BCRYPT_MAX_BYTES = 72
+
+
+def _prepare(password: str) -> bytes:
+    return password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+
 
 def hash_password(password: str) -> str:
-    """Hash a password"""
-    return pwd_context.hash(password)
+    """Hash a password with bcrypt."""
+    return bcrypt.hashpw(_prepare(password), bcrypt.gensalt()).decode("utf-8")
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash"""
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify a password against its bcrypt hash."""
+    try:
+        return bcrypt.checkpw(_prepare(plain_password), hashed_password.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create a JWT access token"""

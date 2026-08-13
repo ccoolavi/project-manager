@@ -31,3 +31,8 @@ Thumbs.db
 
 # Baileys auth state
 baileys_auth_info/
+# Python
+backend/venv/
+backend/__pycache__/
+**/__pycache__/
+*.pyc

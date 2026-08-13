@@ -6,6 +6,7 @@ from database import get_db
 from schemas import ProjectCreate, ProjectUpdate, ProjectResponse, SubProjectCreate, SubProjectResponse
 from models import Project, SubProject, Organization, OrganizationMember
 from middleware.auth import get_current_user, get_current_org_id
+from utils.tenancy import resolve_project
 
 router = APIRouter(prefix="/api/orgs/{org_id}/projects", tags=["projects"])
 
@@ -185,6 +186,9 @@ async def create_sub_project(
     if not member or member.role.value not in ["owner", "admin"]:
         raise HTTPException(status_code=403, detail="Permission denied")
 
+    # Prove the parent project belongs to this org before attaching a child to it.
+    resolve_project(db, org_id, project_id)
+
     new_sub = SubProject(
         project_id=project_id,
         name=sub_project_data.name,
@@ -216,6 +220,9 @@ async def list_sub_projects(
 
     if not member:
         raise HTTPException(status_code=403, detail="Access denied")
+
+    # Without this the caller could list sub-projects of another org's project.
+    resolve_project(db, org_id, project_id)
 
     subs = db.query(SubProject).filter(SubProject.project_id == project_id).all()
     return [SubProjectResponse.from_orm(s) for s in subs]

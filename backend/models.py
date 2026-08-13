@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, JSON, Enum as SQLEnum
+from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import relationship
 from database import Base
 from datetime import datetime
@@ -53,7 +54,11 @@ class User(Base):
     organizations = relationship("Organization", back_populates="owner")
     memberships = relationship("OrganizationMember", back_populates="user")
     created_projects = relationship("Project", back_populates="created_by_user")
-    assigned_tasks = relationship("Task", back_populates="assignee")
+    # Task links to users twice (assignee_id and created_by), so the join column
+    # must be named explicitly or SQLAlchemy cannot resolve the relationship.
+    assigned_tasks = relationship(
+        "Task", foreign_keys="Task.assignee_id", back_populates="assignee"
+    )
     created_tasks = relationship("Task", foreign_keys="Task.created_by", back_populates="created_by_user")
     habits = relationship("Habit", back_populates="user")
     kaizen_logs = relationship("KaizenLog", back_populates="user")
@@ -153,7 +158,9 @@ class Habit(Base):
     category = Column(String, nullable=True)
     target_days = Column(Integer, default=7)
     streak = Column(Integer, default=0)
-    completed_dates = Column(JSON, default=list)
+    # MutableList is required: a plain JSON column does not detect in-place
+    # ``.append(...)``, so habit check-ins were silently never persisted.
+    completed_dates = Column(MutableList.as_mutable(JSON), default=list)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -183,6 +190,7 @@ class TimeEntry(Base):
     __tablename__ = "time_entries"
 
     id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), index=True)
     task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     duration_minutes = Column(Integer)

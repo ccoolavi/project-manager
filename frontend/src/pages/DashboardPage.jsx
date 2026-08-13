@@ -102,6 +102,7 @@ export default function DashboardPage() {
                 <div className="lg:col-span-1">
                   <ProjectList
                     selectedProjectId={selectedProjectId}
+                    selectedSubProjectId={selectedSubProjectId}
                     onSelectProject={handleSelectProject}
                   />
                 </div>
@@ -118,6 +119,7 @@ export default function DashboardPage() {
             {activeTab === 'projects' && (
               <ProjectList
                 selectedProjectId={selectedProjectId}
+                selectedSubProjectId={selectedSubProjectId}
                 onSelectProject={handleSelectProject}
               />
             )}
