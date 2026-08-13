@@ -120,11 +120,20 @@ export default function GanttView() {
           <div className="overflow-x-auto">
             <div style={{ minWidth: 640 }}>
               <div className="relative h-6 mb-1 text-xs text-slate-500 border-b border-slate-800">
-                {weekMarkers.map((m, i) => (
-                  <span key={i} className="absolute -translate-x-1/2" style={{ left: m.left }}>
-                    {m.label}
-                  </span>
-                ))}
+                {weekMarkers.map((m, i) => {
+                  // The first and last markers sit exactly at the 0%/100%
+                  // edges; centering them (translate-x -50%) pushed half the
+                  // label outside the scroll container, clipping it and
+                  // wrapping the remainder onto several lines. Anchor those
+                  // two to the inside edge instead.
+                  const anchorClass =
+                    i === 0 ? '' : i === weekMarkers.length - 1 ? '-translate-x-full' : '-translate-x-1/2'
+                  return (
+                    <span key={i} className={`absolute whitespace-nowrap ${anchorClass}`} style={{ left: m.left }}>
+                      {m.label}
+                    </span>
+                  )
+                })}
               </div>
 
               <div className="relative">
