@@ -94,7 +94,31 @@ try {
   await page.screenshot({ path: `${SHOTS}/8-kaizen.png` })
   ok(true, 'kaizen tab rendered')
 
-  console.log('== 10. Logout / session handling ==')
+
+  console.log('== 11. Runtime config drives the API endpoint ==')
+  const cfg = await page.evaluate(async () => {
+    const r = await fetch('/project-manager/config.json', { cache: 'no-store' })
+    return r.ok ? await r.json() : null
+  })
+  ok(!!cfg?.apiUrl, `config.json served at runtime (${cfg?.apiUrl || 'missing'})`)
+
+  console.log('== 12. Settings -> People / invite ==')
+  await page.getByText(/^Settings$/).first().click()
+  await page.waitForTimeout(3000)
+  const settingsText = await page.locator('body').innerText()
+  ok(/People/.test(settingsText), 'People section renders')
+  ok(/UI Test User/.test(settingsText), 'current user listed as a member')
+  ok(/Add someone/.test(settingsText), 'owner sees the invite form (RBAC gate open for owner)')
+
+  const inviteEmail = `invitee${stamp}@test.com`
+  await page.locator('input[type="email"]').last().fill(inviteEmail)
+  await page.getByRole('button', { name: /^Invite$/ }).click()
+  await page.waitForTimeout(3500)
+  await page.screenshot({ path: `${SHOTS}/10-members.png` })
+  const afterInvite = await page.locator('body').innerText()
+  ok(/Invitation sent|Waiting to join/.test(afterInvite), 'invitation accepted by the server')
+
+  console.log('== 13. Final ==')
   await page.screenshot({ path: `${SHOTS}/9-final.png`, fullPage: true })
 } catch (e) {
   console.log(`  FAIL  exception: ${e.message.split('\n')[0]}`)
