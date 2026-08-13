@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from typing import Optional
 from datetime import timedelta
 
 from database import get_db
@@ -105,8 +106,19 @@ async def login(credentials: UserLogin, db: Session = Depends(get_db)):
     )
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Refresh access token using refresh token"""
+async def refresh_token(
+    org_id: Optional[int] = None,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Re-issue a token, optionally scoped to a specific organization.
+
+    The client calls this after creating an organization (the sign-up token has no
+    org claims yet) and after switching organizations, so that ``org_id``, ``role``
+    and ``permissions`` always describe the organization actually being viewed.
+    Without the ``org_id`` argument the token would always describe the user's
+    first membership, which silently breaks multi-org role handling.
+    """
 
     user_id = int(current_user.get("sub"))
     user = db.query(User).filter(User.id == user_id).first()
@@ -117,19 +129,27 @@ async def refresh_token(current_user: dict = Depends(get_current_user), db: Sess
             detail="Invalid user"
         )
 
-    # Get user's current organization
-    org = None
-    if user.memberships:
-        org = user.memberships[0].organization
+    membership = None
+    if org_id is not None:
+        membership = next(
+            (m for m in user.memberships if m.organization_id == org_id), None
+        )
+        if membership is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not a member of that organization",
+            )
+    elif user.memberships:
+        membership = user.memberships[0]
 
     token_data = {
         "sub": str(user.id),
         "email": user.email,
     }
-    if org:
-        user_role = user.memberships[0].role.value
+    if membership:
+        user_role = membership.role.value
         token_data.update({
-            "org_id": org.id,
+            "org_id": membership.organization_id,
             "role": user_role,
             "permissions": get_permissions_for_role(user_role)
         })

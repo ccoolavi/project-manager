@@ -112,7 +112,9 @@ async def list_members(
 
     return [OrganizationMemberResponse.from_orm(m) for m in members]
 
-@router.post("/{org_id}/members", response_model=OrganizationMemberResponse)
+# Returns a plain confirmation message, not a member record: when the invitee has
+# no account yet there is no membership row to return.
+@router.post("/{org_id}/members")
 async def add_member(
     org_id: int,
     invite: InviteMember,

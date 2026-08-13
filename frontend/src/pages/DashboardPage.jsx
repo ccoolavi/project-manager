@@ -13,7 +13,7 @@ import api from '../utils/api'
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const { currentOrg, createOrg } = useOrg()
+  const { currentOrg, createOrg, initialized } = useOrg()
   const [activeTab, setActiveTab] = useState('tasks')
   const [selectedProjectId, setSelectedProjectId] = useState(null)
   const [selectedSubProjectId, setSelectedSubProjectId] = useState(null)
@@ -22,11 +22,11 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    // If no org, show create org modal
-    if (!currentOrg) {
-      setShowCreateOrgModal(true)
-    }
-  }, [currentOrg])
+    // Only offer the first-run modal once the org list has actually loaded.
+    // Keying this off `!currentOrg` alone left returning members permanently
+    // stuck on "create your first organisation" after every page reload.
+    setShowCreateOrgModal(initialized && !currentOrg)
+  }, [currentOrg, initialized])
 
   const handleCreateOrg = async () => {
     if (!orgName.trim()) return
@@ -77,7 +77,7 @@ export default function DashboardPage() {
   if (!currentOrg) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <p className="text-white">Loading...</p>
+        <p className="text-slate-400">Loading your workspace...</p>
       </div>
     )
   }
