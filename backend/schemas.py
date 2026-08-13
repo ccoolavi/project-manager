@@ -223,3 +223,23 @@ class RequestOTP(BaseModel):
 class VerifyOTP(BaseModel):
     phone: str
     code: str
+
+# Ikigai Schemas
+class IkigaiUpdate(BaseModel):
+    love: Optional[str] = None
+    good_at: Optional[str] = None
+    world_needs: Optional[str] = None
+    paid_for: Optional[str] = None
+    purpose: Optional[str] = None
+
+class IkigaiResponse(BaseModel):
+    id: Optional[int] = None
+    love: Optional[str] = None
+    good_at: Optional[str] = None
+    world_needs: Optional[str] = None
+    paid_for: Optional[str] = None
+    purpose: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

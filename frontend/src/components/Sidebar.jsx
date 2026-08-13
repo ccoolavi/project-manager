@@ -1,4 +1,4 @@
-import { CheckSquare, Folder, Heart, Clock, Lightbulb, Settings } from 'lucide-react'
+import { CheckSquare, Folder, Heart, Clock, Lightbulb, Compass, Settings } from 'lucide-react'
 
 const tabs = [
   { id: 'tasks', label: 'Tasks', icon: CheckSquare },
@@ -6,6 +6,7 @@ const tabs = [
   { id: 'habits', label: 'Habits', icon: Heart },
   { id: 'time', label: 'Time', icon: Clock },
   { id: 'kaizen', label: 'Kaizen', icon: Lightbulb },
+  { id: 'ikigai', label: 'Purpose', icon: Compass },
   { id: 'settings', label: 'Settings', icon: Settings }
 ]
 

@@ -74,11 +74,23 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    // The server is a single shared ARM core, but this is a static bundle on
+    // GitHub Pages, so the cost that matters is what a phone has to download and
+    // parse over a slow connection.
+    target: 'es2020',
+    cssCodeSplit: true,
+    reportCompressedSize: false,
+    chunkSizeWarningLimit: 250,
+    minify: 'esbuild',
     rollupOptions: {
       output: {
+        // Split by change cadence, not by size: react and the router almost never
+        // change, so a routine app update should not invalidate them in cache.
         manualChunks: {
           react: ['react', 'react-dom'],
-          router: ['react-router-dom']
+          router: ['react-router-dom'],
+          vendor: ['axios', 'zod'],
+          icons: ['lucide-react']
         }
       }
     }

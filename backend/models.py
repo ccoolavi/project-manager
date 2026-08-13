@@ -241,3 +241,21 @@ class OTPSession(Base):
     expires_at = Column(DateTime)
     verified_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Ikigai(Base):
+    """A person's ikigai: the four overlapping questions, plus the purpose
+    statement they draw from them. One record per person per organisation."""
+
+    __tablename__ = "ikigai"
+
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    love = Column(Text, nullable=True)
+    good_at = Column(Text, nullable=True)
+    world_needs = Column(Text, nullable=True)
+    paid_for = Column(Text, nullable=True)
+    purpose = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

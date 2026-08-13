@@ -11,7 +11,19 @@ import HabitTracker from '../components/HabitTracker'
 import TimeLogger from '../components/TimeLogger'
 import KaizenLog from '../components/KaizenLog'
 import MemberManager from '../components/MemberManager'
+import Ikigai from '../components/Ikigai'
 import api from '../utils/api'
+
+// Tab ids are lowercase slugs; these are the words the user should actually see.
+const TAB_TITLES = {
+  tasks: 'Tasks',
+  projects: 'Projects',
+  habits: 'Habits',
+  time: 'Time',
+  kaizen: 'Kaizen',
+  ikigai: 'Purpose',
+  settings: 'Settings'
+}
 
 export default function DashboardPage() {
   const { user } = useAuth()
@@ -94,7 +106,7 @@ export default function DashboardPage() {
           <div className="max-w-6xl mx-auto">
             <div className="flex justify-between items-center mb-8">
               <div>
-                <h1 className="text-3xl font-bold text-white">{activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}</h1>
+                <h1 className="text-3xl font-bold text-white">{TAB_TITLES[activeTab] || activeTab}</h1>
                 <p className="text-slate-400 mt-1">Org: <span className="text-brand-400">{currentOrg?.name}</span></p>
               </div>
             </div>
@@ -140,6 +152,11 @@ export default function DashboardPage() {
             {/* Kaizen Tab */}
             {activeTab === 'kaizen' && (
               <KaizenLog />
+            )}
+
+            {/* Ikigai / Purpose Tab */}
+            {activeTab === 'ikigai' && (
+              <Ikigai />
             )}
 
             {/* Settings Tab */}
