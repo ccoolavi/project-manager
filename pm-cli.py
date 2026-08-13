@@ -20,6 +20,7 @@ import shutil
 import string
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime
 
@@ -325,6 +326,67 @@ def cmd_kaizen_log(args):
     emit(log)
 
 
+def cmd_comment_list(args):
+    comments = request(
+        "GET",
+        f"/api/orgs/{args.org}/projects/{args.project}/tasks/{args.section}/{args.task}/comments",
+        token=load_token(),
+    )
+    rows = [
+        {"id": c["id"], "author": (c.get("user") or {}).get("name") or (c.get("user") or {}).get("email"), "content": c["content"]}
+        for c in comments
+    ]
+    emit(rows, table=[("ID", "id"), ("AUTHOR", "author"), ("COMMENT", "content")])
+
+
+def cmd_comment_add(args):
+    comment = request(
+        "POST",
+        f"/api/orgs/{args.org}/projects/{args.project}/tasks/{args.section}/{args.task}/comments",
+        {"content": args.content},
+        token=load_token(),
+    )
+    emit(comment)
+
+
+def cmd_notification_list(args):
+    notifications = request("GET", "/api/notifications", token=load_token())
+    emit(notifications, table=[("ID", "id"), ("TYPE", "type"), ("TITLE", "title"), ("MESSAGE", "message")])
+
+
+def cmd_notification_read_all(args):
+    emit(request("POST", "/api/notifications/read-all", token=load_token()))
+
+
+def cmd_sprint_create(args):
+    sprint = request(
+        "POST",
+        f"/api/orgs/{args.org}/projects/{args.project}/sprints",
+        {
+            "name": args.name,
+            "goal": args.goal or None,
+            "start_date": f"{args.start}T00:00:00",
+            "end_date": f"{args.end}T00:00:00",
+        },
+        token=load_token(),
+    )
+    info(f"created sprint {sprint['id']}")
+    emit(sprint)
+
+
+def cmd_sprint_list(args):
+    sprints = request("GET", f"/api/orgs/{args.org}/projects/{args.project}/sprints", token=load_token())
+    emit(
+        sprints,
+        table=[("ID", "id"), ("NAME", "name"), ("STATUS", "status"), ("POINTS", "total_points"), ("DONE", "completed_points")],
+    )
+
+
+def cmd_search(args):
+    results = request("GET", f"/api/orgs/{args.org}/search?q={urllib.parse.quote(args.query)}", token=load_token())
+    emit(results, table=[("TYPE", "type"), ("ID", "id"), ("TITLE", "title"), ("SUBTITLE", "subtitle")])
+
+
 def cmd_db_backup(args):
     """Copy the SQLite database aside.
 
@@ -479,6 +541,40 @@ def build_parser() -> argparse.ArgumentParser:
     kl.add_argument("--solution", default="")
     kl.add_argument("--category", default="productivity")
     kl.set_defaults(func=cmd_kaizen_log)
+
+    comment = sub.add_parser("comment", help="task comments").add_subparsers(dest="sub")
+    cl = add(comment, "list")
+    for a in ("--org", "--project", "--section", "--task"):
+        cl.add_argument(a, type=int, required=True)
+    cl.set_defaults(func=cmd_comment_list)
+    ca = add(comment, "add")
+    for a in ("--org", "--project", "--section", "--task"):
+        ca.add_argument(a, type=int, required=True)
+    ca.add_argument("--content", required=True)
+    ca.set_defaults(func=cmd_comment_add)
+
+    notif = sub.add_parser("notification", help="in-app notifications").add_subparsers(dest="sub")
+    add(notif, "list").set_defaults(func=cmd_notification_list)
+    add(notif, "read-all").set_defaults(func=cmd_notification_read_all)
+
+    sprint = sub.add_parser("sprint", help="sprint planning").add_subparsers(dest="sub")
+    spc = add(sprint, "create")
+    for a in ("--org", "--project"):
+        spc.add_argument(a, type=int, required=True)
+    spc.add_argument("--name", required=True)
+    spc.add_argument("--goal")
+    spc.add_argument("--start", required=True, help="YYYY-MM-DD")
+    spc.add_argument("--end", required=True, help="YYYY-MM-DD")
+    spc.set_defaults(func=cmd_sprint_create)
+    spl = add(sprint, "list")
+    for a in ("--org", "--project"):
+        spl.add_argument(a, type=int, required=True)
+    spl.set_defaults(func=cmd_sprint_list)
+
+    se = add(sub, "search", help="search projects, tasks, habits and kaizen logs in an org")
+    se.add_argument("--org", type=int, required=True)
+    se.add_argument("--query", required=True)
+    se.set_defaults(func=cmd_search)
 
     db = sub.add_parser("db", help="database maintenance").add_subparsers(dest="sub")
     add(db, "backup").set_defaults(func=cmd_db_backup)

@@ -98,6 +98,22 @@ created the organisation.
 ./pm-cli.py time log    --org 3 --minutes 45 --category development
 ./pm-cli.py kaizen log  --org 3 --title "Batch email" \
     --problem "Constant context switching" --solution "Two fixed windows a day"
+
+# Comments
+./pm-cli.py comment list --org 3 --project 7 --section 9 --task 12
+./pm-cli.py comment add  --org 3 --project 7 --section 9 --task 12 --content "Looks good"
+
+# Notifications (your own — there's no --org, since notifications aren't org-scoped)
+./pm-cli.py notification list
+./pm-cli.py notification read-all
+
+# Sprints
+./pm-cli.py sprint create --org 3 --project 7 --name "Sprint 4" \
+    --goal "Ship checkout" --start 2026-09-01 --end 2026-09-14
+./pm-cli.py sprint list --org 3 --project 7
+
+# Search across projects, tasks, habits and kaizen logs in an org
+./pm-cli.py search --org 3 --query "checkout"
 ```
 
 ## Database
