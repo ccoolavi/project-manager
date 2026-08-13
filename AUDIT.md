@@ -6,25 +6,34 @@ browser → deployed asset → HTTPS API → database → visible result in UI.
 
 ---
 
-## 0. Verdict
+## 0. Verdict (as found)
 
-**The application does not work.** Not "mostly works with gaps" — the deployed page is
-blank, the API server is not running, and the client was never pointed at a reachable
-server. Every previous "complete and functional" claim (this session and the Hermes
-session `20260729_200704_a0129b`) was unverified.
+**The application did not work.** The site visitors saw was a months-old PocketBase-era
+build, the API server was not running at all, and the client had never been pointed at a
+reachable server. Every previous "complete and functional" claim (this session and the
+Hermes session `20260729_200704_a0129b`) was unverified.
 
 Observed evidence:
 
 | Check | Command | Result |
 |---|---|---|
-| Deployed page loads | `curl https://ccoolavi.github.io/project-manager/` | `200` (HTML only) |
-| Deployed JS bundle loads | `curl .../assets/index-Fx5pu4gu.js` | **`404` — blank white page** |
-| URL given to user last turn | `curl https://avishkarsolat.github.io/project-manager/` | **`404` — wrong account entirely** |
+| Deployed page loads | `curl https://ccoolavi.github.io/project-manager/` | `200` — but a **stale build from 6 Aug** |
+| URL given to the user last turn | `curl https://avishkarsolat.github.io/project-manager/` | **`404` — wrong account entirely** |
 | gh-pages branch contents | `git ls-tree -r origin/gh-pages` | **`index.html` only, zero assets** |
 | API server running | `ss -tlnp` | **no FastAPI process anywhere** |
 | Port 8000 | `curl localhost:8000/api/health` | **occupied by an unrelated shop/rental API** |
 | PocketBase on 8090 | `curl localhost:8090` | **dead** |
-| Public tunnel | `curl https://developers-took-cognitive-vsnet.trycloudflare.com/api/health` | `502` (tunnel alive, origin dead) |
+| Public tunnel | `curl https://…trycloudflare.com/api/health` | `502` (tunnel alive, origin dead) |
+| Register a user | `POST /api/auth/register` | **500** — two independent crashes (see D7, E4) |
+
+### Correction to an earlier reading
+
+My first pass called the live page "blank". That was wrong, and the real situation is no
+better. GitHub Pages for this repo is configured as **deploy from branch `main`, root
+folder** — it serves the *repository root*, where an old build was committed on 6 August.
+So the `git subtree push --prefix frontend/dist origin gh-pages` deploys were doubly
+broken: `dist` is git-ignored so they pushed almost nothing, **and** nothing serves the
+`gh-pages` branch anyway. Every deploy reported success while the live site never changed.
 
 ---
 
@@ -113,9 +122,9 @@ The user's 13-point brief. Current status:
 
 ### P0 — blocks any use whatsoever
 
-1. **Deployed site is a blank page.** `frontend/.gitignore:18` ignores `dist`, so
-   `git subtree push --prefix frontend/dist` shipped only the one stale tracked
-   `index.html`. The bundle it references was never committed.
+1. **Deployed site was a stale build.** Pages serves the repo root; the deploys targeted
+   the `gh-pages` branch, which nothing serves, and `frontend/.gitignore:18` ignores
+   `dist` so those pushes carried almost nothing either.
 2. **No API server running.** Nothing serves the FastAPI app.
 3. **Port collision.** `:8000` is taken by an unrelated app. FastAPI must move.
 4. **No HTTPS path to the API.** Required for a page served from GitHub Pages.
@@ -142,6 +151,18 @@ The user's 13-point brief. Current status:
     column in place; SQLAlchemy does not detect it without `MutableList`.
 13. **`PermissionGate` is a no-op stub** — the RBAC UI restriction was never implemented.
 
+### Found only by actually exercising the API
+
+These two made registration — the very first thing any user does — return a 500 every
+single time. Neither could be found by inspection, compilation, or a health check, which
+is precisely why "the build succeeds" was never acceptance evidence.
+
+14. **`AmbiguousForeignKeysError` on `User.assigned_tasks`.** `Task` references `users`
+    twice (`assignee_id` and `created_by`), so SQLAlchemy could not resolve the
+    relationship and every ORM query raised.
+15. **passlib is incompatible with bcrypt 4.x.** `ValueError: password cannot be longer
+    than 72 bytes` on every password hash. Replaced passlib with bcrypt directly.
+
 ### P2 — requirements never started
 
 14. WhatsApp OTP flow, admin-provisioned accounts, Ikigai, working CLI, invite UI,
@@ -163,30 +184,30 @@ The user's 13-point brief. Current status:
 
 Ordered so that the user can *see* something work as early as possible.
 
-### Phase 0 — Close the loop (highest priority)
+### Phase 0 — Close the loop — **DONE, verified 2026-08-13**
 
-| # | Action | Verification |
+| # | Action | Verification (actually run) |
 |---|---|---|
-| 0.1 | Move FastAPI to `:8090` (PocketBase is dead; the **existing** cloudflared quick tunnel already forwards 8090 and gives HTTPS for free) | `curl localhost:8090/api/health` → 200 |
-| 0.2 | Generate a real `SECRET_KEY`; set `FRONTEND_URL=https://ccoolavi.github.io` | grep `.env`, confirm 43-char random value |
-| 0.3 | Fix CORS to use origins, add the tunnel origin | `curl -H 'Origin: https://ccoolavi.github.io' -X OPTIONS` → `access-control-allow-origin` present |
-| 0.4 | Add `frontend/.env.production` with the tunnel HTTPS URL | `grep trycloudflare dist/assets/*.js` |
-| 0.5 | Un-ignore `dist`, or force-add, so assets actually deploy | `git ls-tree -r origin/gh-pages` lists `assets/*.js` |
-| 0.6 | Redeploy and fetch the bundle over the public URL | `curl -I .../assets/index-*.js` → 200 |
-| 0.7 | Register → login → create org **through the public URL** | JWT returned; row visible in SQLite |
-| 0.8 | systemd unit so the API survives reboot | `systemctl status` → active |
+| 0.1 | Move FastAPI to `:8090` (the existing cloudflared tunnel already forwards it, giving HTTPS free) | ✅ `curl localhost:8090/api/health` → `{"status":"ok"}` |
+| 0.2 | Generate a real `SECRET_KEY`; `FRONTEND_URL=https://ccoolavi.github.io` | ✅ `.env` holds a 64-char random value |
+| 0.3 | Fix CORS to use bare origins | ✅ preflight from `https://ccoolavi.github.io` → `access-control-allow-origin` echoed, HTTP 200 |
+| 0.4 | `frontend/.env.production` with the HTTPS API URL | ✅ tunnel URL present in bundle, `localhost:8000` count = 0 |
+| 0.5 | Deploy to the path Pages actually serves (repo root, not gh-pages) | ✅ `deploy-frontend.sh` rewritten; live `index.html` references the new hash |
+| 0.6 | Fetch the new bundle over the public URL | ✅ `assets/index-pzTnviT4.js` → 200; icons and webmanifest → 200 |
+| 0.7 | Full user journey through the **public HTTPS** endpoint | ✅ 19/19 checks pass (register, login, org, project, section, task CRUD, habit, time, kaizen) |
+| 0.8 | systemd unit so the API survives reboot | ✅ `systemctl is-active kaizenpm-api` → `active`, `is-enabled` → `enabled` |
 
-### Phase 1 — Make every visible feature real
+### Phase 1 — Make every visible feature real — **mostly done**
 
-| # | Action | Verification |
+| # | Action | Verification (actually run) |
 |---|---|---|
-| 1.1 | Create `routers/kaizen.py`, `routers/time.py`; register both | routes appear in `/openapi.json` |
-| 1.2 | Sub-project create UI in `ProjectList.jsx` | create sub-project → Kanban renders |
-| 1.3 | Fix cross-org leak: validate project→org and sub-project→project on every task route | org B member gets 403/404 for org A task |
-| 1.4 | Fix `add_member` response model | POST member → 200 with typed body |
-| 1.5 | Fix habit JSON persistence (`MutableList` or reassignment) | check habit, restart server, streak survives |
-| 1.6 | Implement `PermissionGate` against JWT permissions | viewer sees no Delete button |
-| 1.7 | Member invite UI | invite → accept → second user sees same org data |
+| 1.1 | Create `routers/kaizen.py`, `routers/time.py`; register both | ✅ create + list both return 200 over HTTPS |
+| 1.2 | Section (sub-project) create UI, plus an auto-created default section per project | ✅ sub-project creation returns 200; board no longer dead-ends |
+| 1.3 | Fix cross-org leak via `utils/tenancy.py` | ✅ Bob using his own `org_id` + Alice's `sub_project_id` → 404 on read and on delete |
+| 1.5 | Fix habit JSON persistence (`MutableList`) | ✅ streak = 1 after a fresh re-read |
+| 1.6 | Implement `PermissionGate` against JWT permission claims | ✅ implemented; UI-level check only, server still authoritative |
+| 1.4 | Fix `add_member` response model | ⬜ outstanding |
+| 1.7 | Member invite UI | ⬜ outstanding (task #21) |
 
 ### Phase 2 — Outstanding original requirements
 

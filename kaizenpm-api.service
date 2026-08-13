@@ -1,14 +1,20 @@
 [Unit]
-Description=PocketBase API Server for KaizenPM
+Description=KaizenPM FastAPI server
 After=network.target
 
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/projects/project_manager
-ExecStart=/home/ubuntu/projects/project_manager/pocketbase serve --http="0.0.0.0:8090" --publicDir="/home/ubuntu/projects/project_manager/frontend/dist" --indexFallback
-Restart=on-failure
+WorkingDirectory=/home/ubuntu/projects/project_manager/backend
+EnvironmentFile=/home/ubuntu/projects/project_manager/backend/.env
+# Bound to loopback on purpose: the public entry point is the Cloudflare tunnel,
+# which terminates TLS. Port 8090 is used because 8000 is taken by another service
+# on this box, and the existing tunnel already forwards 8090.
+ExecStart=/home/ubuntu/projects/project_manager/backend/venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8090 --workers 1
+Restart=always
 RestartSec=3
+# 6 GB box shared with other services — keep the footprint small.
+MemoryMax=512M
 
 [Install]
 WantedBy=multi-user.target
