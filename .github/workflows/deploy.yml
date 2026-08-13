@@ -55,6 +55,8 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
+      # Pages serves the repository root for this repo; deploy-frontend.sh writes the
+      # build there. This workflow is kept as a build/regression check only.
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
