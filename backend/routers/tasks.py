@@ -41,6 +41,8 @@ async def create_task(
         priority=task_data.priority,
         assignee_id=task_data.assignee_id,
         due_date=task_data.due_date,
+        start_date=task_data.start_date,
+        story_points=task_data.story_points or 0,
         created_by=user_id,
     )
     db.add(new_task)
@@ -124,6 +126,10 @@ async def update_task(
         task.assignee_id = task_data.assignee_id
     if task_data.due_date is not None:
         task.due_date = task_data.due_date
+    if task_data.start_date is not None:
+        task.start_date = task_data.start_date
+    if task_data.story_points is not None:
+        task.story_points = task_data.story_points
 
     db.commit()
     db.refresh(task)

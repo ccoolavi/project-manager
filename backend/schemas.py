@@ -113,6 +113,8 @@ class TaskCreate(BaseModel):
     priority: TaskPriority = TaskPriority.medium
     assignee_id: Optional[int] = None
     due_date: Optional[datetime] = None
+    start_date: Optional[datetime] = None
+    story_points: Optional[int] = Field(default=None, ge=1, le=13)
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -121,6 +123,8 @@ class TaskUpdate(BaseModel):
     priority: Optional[TaskPriority] = None
     assignee_id: Optional[int] = None
     due_date: Optional[datetime] = None
+    start_date: Optional[datetime] = None
+    story_points: Optional[int] = Field(default=None, ge=1, le=13)
 
 class TaskResponse(BaseModel):
     id: int
@@ -131,6 +135,8 @@ class TaskResponse(BaseModel):
     priority: TaskPriority
     assignee_id: Optional[int] = None
     due_date: Optional[datetime] = None
+    start_date: Optional[datetime] = None
+    story_points: Optional[int] = None
     created_by: int
     created_at: datetime
     comment_count: int = 0

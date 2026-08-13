@@ -10,11 +10,20 @@ export default function KanbanBoard({ projectId, subProjectId }) {
   const [newTask, setNewTask] = useState('')
   const [loading, setLoading] = useState(false)
   const [openTaskId, setOpenTaskId] = useState(null)
+  const [members, setMembers] = useState([])
 
   useEffect(() => {
     fetchTasks()
     setOpenTaskId(null)
   }, [subProjectId])
+
+  useEffect(() => {
+    if (!currentOrg) return
+    api
+      .get(`/api/orgs/${currentOrg.id}/members`)
+      .then((res) => setMembers(res.data))
+      .catch(() => setMembers([]))
+  }, [currentOrg?.id])
 
   const fetchTasks = async () => {
     if (!subProjectId) return
@@ -179,7 +188,9 @@ export default function KanbanBoard({ projectId, subProjectId }) {
           projectId={projectId}
           subProjectId={subProjectId}
           task={openTask}
+          members={members}
           onClose={() => setOpenTaskId(null)}
+          onTaskUpdate={(updated) => setTasks((current) => current.map((t) => (t.id === updated.id ? updated : t)))}
         />
       )}
     </div>

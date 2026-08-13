@@ -139,6 +139,8 @@ class Task(Base):
     priority = Column(SQLEnum(TaskPriority), default=TaskPriority.medium)
     assignee_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     due_date = Column(DateTime, nullable=True)
+    start_date = Column(DateTime, nullable=True)
+    story_points = Column(Integer, default=0)
     created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

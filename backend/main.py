@@ -7,12 +7,32 @@ from fastapi.responses import JSONResponse
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("kaizenpm")
 
+from sqlalchemy import text
+
 from config import settings
 from database import engine, Base
 from routers import auth, organizations, projects, tasks, habits, kaizen, time, otp, ikigai, invites, comments, search, email_otp, notifications
 
-# Create database tables
+# Create database tables. This only creates tables that don't exist yet — it
+# never alters an existing table, so a new column on an existing model (like
+# Task) needs an explicit ALTER TABLE below as well.
 Base.metadata.create_all(bind=engine)
+
+# Column migrations for existing tables. SQLite's ALTER TABLE can only add a
+# column, not detect whether one is already there, so each statement is tried
+# and any failure (column already exists) is swallowed. Keep every migration
+# for every feature in this one block rather than scattering ALTER TABLEs
+# across the codebase.
+with engine.connect() as conn:
+    for stmt in [
+        "ALTER TABLE tasks ADD COLUMN story_points INTEGER DEFAULT 0",
+        "ALTER TABLE tasks ADD COLUMN start_date TIMESTAMP",
+    ]:
+        try:
+            conn.execute(text(stmt))
+            conn.commit()
+        except Exception:
+            pass  # column already exists
 
 # Initialize FastAPI app
 app = FastAPI(
