@@ -129,6 +129,7 @@ class TaskResponse(BaseModel):
     due_date: Optional[datetime] = None
     created_by: int
     created_at: datetime
+    comment_count: int = 0
 
     class Config:
         from_attributes = True
@@ -240,6 +241,22 @@ class IkigaiResponse(BaseModel):
     paid_for: Optional[str] = None
     purpose: Optional[str] = None
     updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+# Task Comment Schemas
+class TaskCommentCreate(BaseModel):
+    content: str
+
+class TaskCommentResponse(BaseModel):
+    id: int
+    task_id: int
+    user_id: int
+    content: str
+    created_at: datetime
+    updated_at: datetime
+    user: UserResponse
 
     class Config:
         from_attributes = True

@@ -1,16 +1,19 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, ChevronRight, ChevronLeft } from 'lucide-react'
+import { Plus, Trash2, ChevronRight, MessageSquare } from 'lucide-react'
 import api from '../utils/api'
 import { useOrg } from '../context/OrgContext'
+import TaskDetailPanel from './TaskDetailPanel'
 
 export default function KanbanBoard({ projectId, subProjectId }) {
   const { currentOrg } = useOrg()
   const [tasks, setTasks] = useState([])
   const [newTask, setNewTask] = useState('')
   const [loading, setLoading] = useState(false)
+  const [openTaskId, setOpenTaskId] = useState(null)
 
   useEffect(() => {
     fetchTasks()
+    setOpenTaskId(null)
   }, [subProjectId])
 
   const fetchTasks = async () => {
@@ -41,7 +44,6 @@ export default function KanbanBoard({ projectId, subProjectId }) {
 
   const updateTaskStatus = async (taskId, newStatus) => {
     try {
-      const task = tasks.find(t => t.id === taskId)
       const res = await api.put(
         `/api/orgs/${currentOrg.id}/projects/${projectId}/tasks/${subProjectId}/${taskId}`,
         { status: newStatus }
@@ -56,6 +58,7 @@ export default function KanbanBoard({ projectId, subProjectId }) {
     try {
       await api.delete(`/api/orgs/${currentOrg.id}/projects/${projectId}/tasks/${subProjectId}/${taskId}`)
       setTasks(tasks.filter(t => t.id !== taskId))
+      if (openTaskId === taskId) setOpenTaskId(null)
     } catch (err) {
       console.error('Failed to delete task:', err)
     }
@@ -68,22 +71,39 @@ export default function KanbanBoard({ projectId, subProjectId }) {
     done: tasks.filter(t => t.status === 'done')
   }
 
+  const openTask = tasks.find(t => t.id === openTaskId) || null
+
   const TaskCard = ({ task }) => (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 mb-2 cursor-move hover:border-brand-500/50">
+    <div
+      onClick={() => setOpenTaskId(task.id)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && setOpenTaskId(task.id)}
+      className="bg-slate-800 border border-slate-700 rounded-lg p-3 mb-2 cursor-pointer hover:border-brand-500/50"
+    >
       <div className="flex justify-between items-start">
-        <div className="flex-1">
-          <p className="text-white font-medium text-sm">{task.title}</p>
-          <span className={`text-xs mt-1 inline-block px-2 py-1 rounded ${
-            task.priority === 'urgent' ? 'bg-red-500/20 text-red-300' :
-            task.priority === 'high' ? 'bg-orange-500/20 text-orange-300' :
-            task.priority === 'medium' ? 'bg-blue-500/20 text-blue-300' :
-            'bg-slate-700 text-slate-300'
-          }`}>
-            {task.priority}
-          </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-white font-medium text-sm break-words">{task.title}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className={`text-xs inline-block px-2 py-1 rounded ${
+              task.priority === 'urgent' ? 'bg-red-500/20 text-red-300' :
+              task.priority === 'high' ? 'bg-orange-500/20 text-orange-300' :
+              task.priority === 'medium' ? 'bg-blue-500/20 text-blue-300' :
+              'bg-slate-700 text-slate-300'
+            }`}>
+              {task.priority}
+            </span>
+            {task.comment_count > 0 && (
+              <span className="flex items-center gap-1 text-xs text-slate-400">
+                <MessageSquare size={12} />
+                {task.comment_count}
+              </span>
+            )}
+          </div>
         </div>
         <button
-          onClick={() => deleteTask(task.id)}
+          onClick={(e) => { e.stopPropagation(); deleteTask(task.id) }}
+          aria-label={`Delete ${task.title}`}
           className="p-1 hover:bg-red-500/20 rounded text-red-400"
         >
           <Trash2 size={14} />
@@ -101,11 +121,13 @@ export default function KanbanBoard({ projectId, subProjectId }) {
             <TaskCard task={task} />
             {status !== 'done' && (
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation()
                   const statuses = ['todo', 'in_progress', 'review', 'done']
                   const nextIdx = (statuses.indexOf(status) + 1) % statuses.length
                   updateTaskStatus(task.id, statuses[nextIdx])
                 }}
+                aria-label="Advance status"
                 className="p-1 hover:bg-brand-500/20 rounded text-slate-400 hover:text-brand-400"
               >
                 <ChevronRight size={14} />
@@ -150,6 +172,16 @@ export default function KanbanBoard({ projectId, subProjectId }) {
         <Column title="Review" status="review" tasks={columns.review} />
         <Column title="Done" status="done" tasks={columns.done} />
       </div>
+
+      {openTask && (
+        <TaskDetailPanel
+          orgId={currentOrg.id}
+          projectId={projectId}
+          subProjectId={subProjectId}
+          task={openTask}
+          onClose={() => setOpenTaskId(null)}
+        />
+      )}
     </div>
   )
 }

@@ -147,6 +147,24 @@ class Task(Base):
     assignee = relationship("User", foreign_keys=[assignee_id], back_populates="assigned_tasks")
     created_by_user = relationship("User", foreign_keys=[created_by], back_populates="created_tasks")
     time_entries = relationship("TimeEntry", back_populates="task", cascade="all, delete-orphan")
+    comments = relationship("TaskComment", back_populates="task", cascade="all, delete-orphan")
+
+    @property
+    def comment_count(self):
+        return len(self.comments)
+
+class TaskComment(Base):
+    __tablename__ = "task_comments"
+
+    id = Column(Integer, primary_key=True)
+    task_id = Column(Integer, ForeignKey("tasks.id"), index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    task = relationship("Task", back_populates="comments")
+    user = relationship("User")
 
 class Habit(Base):
     __tablename__ = "habits"
