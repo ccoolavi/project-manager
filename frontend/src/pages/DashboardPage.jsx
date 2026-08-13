@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useOrg } from '../context/OrgContext'
+import { useLocalization } from '../context/LocalizationContext'
 import Navbar from '../components/Navbar'
 import Sidebar from '../components/Sidebar'
 import KanbanBoard from '../components/KanbanBoard'
@@ -15,6 +16,7 @@ import api from '../utils/api'
 export default function DashboardPage() {
   const { user } = useAuth()
   const { currentOrg, createOrg, initialized } = useOrg()
+  const { formatDate } = useLocalization()
   const [activeTab, setActiveTab] = useState('tasks')
   const [selectedProjectId, setSelectedProjectId] = useState(null)
   const [selectedSubProjectId, setSelectedSubProjectId] = useState(null)
@@ -154,7 +156,7 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-2">Member Since</label>
-                      <p className="text-white">{new Date().toLocaleDateString()}</p>
+                      <p className="text-white">{formatDate(currentOrg?.created_at || new Date())}</p>
                     </div>
                   </div>
                 </div>

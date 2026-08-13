@@ -1,6 +1,7 @@
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { OrgProvider, useOrg } from './context/OrgContext'
+import { LocalizationProvider } from './context/LocalizationContext'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
@@ -48,11 +49,13 @@ function AppRoutes() {
 export default function App() {
   return (
     <Router>
-      <AuthProvider>
-        <OrgProvider>
-          <AppRoutes />
-        </OrgProvider>
-      </AuthProvider>
+      <LocalizationProvider>
+        <AuthProvider>
+          <OrgProvider>
+            <AppRoutes />
+          </OrgProvider>
+        </AuthProvider>
+      </LocalizationProvider>
     </Router>
   )
 }

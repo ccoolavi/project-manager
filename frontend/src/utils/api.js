@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { getApiUrl } from '../config'
+import { enqueue, isOfflineError } from './offlineQueue'
 
 const api = axios.create({
   headers: {
@@ -26,7 +27,9 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// Handle 401 responses
+const WRITE_METHODS = ['post', 'put', 'patch', 'delete']
+
+// Handle 401s, and park writes that failed because the device is offline.
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -35,9 +38,36 @@ api.interceptors.response.use(
       localStorage.removeItem('refresh_token')
       localStorage.removeItem('user')
       window.location.href = '/project-manager/#/login'
+      return Promise.reject(error)
     }
+
+    const cfg = error.config
+    if (cfg && WRITE_METHODS.includes(cfg.method) && isOfflineError(error) && !cfg._replayed) {
+      try {
+        await enqueue({
+          method: cfg.method,
+          url: cfg.url,
+          data: cfg.data ? JSON.parse(cfg.data) : undefined
+        })
+        window.dispatchEvent(new CustomEvent('kaizenpm:queued'))
+      } catch {
+        // IndexedDB unavailable (private mode, quota) — surface the original error.
+      }
+    }
+
     return Promise.reject(error)
   }
 )
+
+/** Replay one queued write. Used by the sync runner. */
+export function replayQueued(item) {
+  return api.request({
+    method: item.method,
+    url: item.url,
+    data: item.data,
+    headers: { 'Idempotency-Key': item.idempotencyKey },
+    _replayed: true
+  })
+}
 
 export default api

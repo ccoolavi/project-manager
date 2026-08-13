@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2, Clock } from 'lucide-react'
 import api from '../utils/api'
 import { useOrg } from '../context/OrgContext'
+import { useLocalization } from '../context/LocalizationContext'
 
 export default function TimeLogger() {
   const { currentOrg } = useOrg()
+  const { formatDuration, formatDate } = useLocalization()
   const [entries, setEntries] = useState([])
   const [duration, setDuration] = useState('')
   const [category, setCategory] = useState('development')
@@ -49,7 +51,7 @@ export default function TimeLogger() {
       <div className="grid grid-cols-2 gap-4 mb-4">
         <div className="bg-brand-500/10 border border-brand-500/30 rounded-lg p-4">
           <p className="text-sm text-slate-400">Total Time Logged</p>
-          <p className="text-2xl font-bold text-brand-400">{totalHours}h</p>
+          <p className="text-2xl font-bold text-brand-400">{formatDuration(totalMinutes)}</p>
         </div>
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4">
           <p className="text-sm text-slate-400">Entries</p>
@@ -87,7 +89,8 @@ export default function TimeLogger() {
         {entries.slice().reverse().map(entry => (
           <div key={entry.id} className="flex justify-between items-center bg-slate-800 p-3 rounded-lg border border-slate-700">
             <div>
-              <p className="font-medium text-white">{entry.duration_minutes} min</p>
+              <p className="font-medium text-white">{formatDuration(entry.duration_minutes)}</p>
+                <p className="text-xs text-slate-500">{formatDate(entry.date)}</p>
               <p className="text-xs text-slate-400">{entry.category}</p>
             </div>
             <button

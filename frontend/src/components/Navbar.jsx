@@ -1,4 +1,5 @@
 import { useAuth } from '../context/AuthContext'
+import SyncStatus from './SyncStatus'
 import { useOrg } from '../context/OrgContext'
 import { LogOut } from 'lucide-react'
 
@@ -21,6 +22,7 @@ export default function Navbar() {
         </select>
       </div>
       <div className="flex items-center gap-4">
+        <SyncStatus />
         <span className="text-slate-300">{user?.name}</span>
         <button
           onClick={logout}
