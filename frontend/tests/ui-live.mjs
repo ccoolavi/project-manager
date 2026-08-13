@@ -118,6 +118,30 @@ try {
   const afterInvite = await page.locator('body').innerText()
   ok(/Invitation sent|Waiting to join/.test(afterInvite), 'invitation accepted by the server')
 
+
+  console.log('== 12b. Purpose / Ikigai ==')
+  await page.getByText(/^Purpose$/).first().click()
+  await page.waitForTimeout(3000)
+  const ik = await page.locator('body').innerText()
+  ok(/What you love/.test(ik), 'ikigai four questions render')
+  const areas = page.locator('textarea')
+  await areas.nth(0).fill('Building tools that remove friction')
+  await areas.nth(1).fill('Breaking messy problems into small steps')
+  await areas.nth(4).fill('I want to make good work easier to do.')
+  await page.getByRole('button', { name: /^Save$/ }).click()
+  await page.waitForTimeout(3500)
+  await page.screenshot({ path: `${SHOTS}/11-ikigai.png` })
+  ok(/Saved|2 of 4/.test(await page.locator('body').innerText()), 'ikigai saved')
+
+  await page.reload({ waitUntil: 'networkidle' })
+  await page.waitForTimeout(5000)
+  await page.getByText(/^Purpose$/).first().click()
+  await page.waitForTimeout(3000)
+  // A textarea's content lives in its value, not in innerText.
+  const restored = await page.locator('textarea').nth(0).inputValue()
+  ok(/remove friction/.test(restored),
+     `ikigai persisted to the server (survives reload) [got: "${restored.slice(0, 40)}"]`)
+
   console.log('== 13. Final ==')
   await page.screenshot({ path: `${SHOTS}/9-final.png`, fullPage: true })
 } catch (e) {
