@@ -1,9 +1,10 @@
-import { CheckSquare, Folder, Heart, Clock, Lightbulb, Compass, Users, BarChart3, GanttChartSquare, Rocket, Settings } from 'lucide-react'
+import { CheckSquare, Folder, Heart, Clock, Lightbulb, Compass, Users, BarChart3, GanttChartSquare, Rocket, CalendarDays, Settings } from 'lucide-react'
 
 const tabs = [
   { id: 'tasks', label: 'Tasks', icon: CheckSquare },
   { id: 'projects', label: 'Projects', icon: Folder },
   { id: 'timeline', label: 'Timeline', icon: GanttChartSquare },
+  { id: 'calendar', label: 'Calendar', icon: CalendarDays },
   { id: 'sprints', label: 'Sprints', icon: Rocket },
   { id: 'habits', label: 'Habits', icon: Heart },
   { id: 'time', label: 'Time', icon: Clock },

@@ -16,6 +16,7 @@ import WorkloadView from '../components/WorkloadView'
 import AnalyticsPage from './AnalyticsPage'
 import GanttView from '../components/GanttView'
 import SprintBoard from '../components/SprintBoard'
+import CalendarView from '../components/CalendarView'
 import PendingInvites from '../components/PendingInvites'
 import ActivityLog from '../components/ActivityLog'
 import api from '../utils/api'
@@ -25,6 +26,7 @@ const TAB_TITLES = {
   tasks: 'Tasks',
   projects: 'Projects',
   timeline: 'Timeline',
+  calendar: 'Calendar',
   sprints: 'Sprints',
   habits: 'Habits',
   time: 'Time',
@@ -169,6 +171,11 @@ export default function DashboardPage() {
                 selectedSubProjectId={selectedSubProjectId}
                 onSelectProject={handleSelectProject}
               />
+            )}
+
+            {/* Calendar Tab */}
+            {activeTab === 'calendar' && (
+              <CalendarView />
             )}
 
             {/* Sprints Tab */}

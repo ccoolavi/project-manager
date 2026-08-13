@@ -4,7 +4,7 @@ from typing import List
 
 from database import get_db
 from schemas import TaskCreate, TaskUpdate, TaskResponse, TaskDependencyCreate, TaskDependencyResponse
-from models import SubProject, Task, TaskDependency
+from models import Project, SubProject, Task, TaskDependency
 from middleware.auth import get_current_user
 from utils.audit import record
 from utils.notifications import notify
@@ -275,3 +275,43 @@ async def remove_dependency(
     db.commit()
 
     return {"message": "Dependency removed"}
+
+
+# Every other task route in this file is scoped under a single project and
+# section (the URL carries both), because that's how the Kanban board reads
+# tasks. The calendar (B10) and bulk operations (B11) need to see every task
+# in an organisation at once, which needs a flatter shape — hence a second
+# router with a shorter prefix, registered separately in main.py.
+org_router = APIRouter(prefix="/api/orgs/{org_id}/tasks", tags=["tasks-org"])
+
+
+@org_router.get("")
+async def list_all_org_tasks(
+    org_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """All tasks across every project in the org, for the calendar and Gantt
+    views. Includes project_id/project_name alongside the usual task fields —
+    a bare TaskResponse has no project_id, and the calendar needs it to open
+    the Task Detail Panel without a second round trip per task.
+    """
+    user_id = int(current_user.get("sub"))
+    require_membership(db, org_id, user_id)
+
+    rows = (
+        db.query(Task, SubProject.project_id, Project.name)
+        .join(SubProject, Task.sub_project_id == SubProject.id)
+        .join(Project, SubProject.project_id == Project.id)
+        .filter(Project.organization_id == org_id)
+        .all()
+    )
+
+    return [
+        {
+            **TaskResponse.from_orm(task).model_dump(),
+            "project_id": project_id,
+            "project_name": project_name,
+        }
+        for task, project_id, project_name in rows
+    ]
