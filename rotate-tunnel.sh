@@ -1,122 +1,108 @@
 #!/bin/bash
-# rotate-tunnel.sh — Zero-downtime ephemeral Cloudflare Quick Tunnel rotation.
-# Strategy: start NEW tunnel first, verify it serves the API, rebuild client,
-# push to GitHub Pages, WAIT for Pages to serve the new bundle, THEN kill old tunnel.
+# Rotate the ephemeral Cloudflare quick tunnel that exposes the API.
+#
+# The client reads its API endpoint at runtime from config.json, so a rotation
+# only has to rewrite that one file and publish it. No client rebuild, and no
+# window where the deployed app points at a dead tunnel because a build was still
+# running. The previous version of this script rebuilt and redeployed the whole
+# bundle on every rotation.
 set -euo pipefail
 
 PROJECT_DIR="/home/ubuntu/projects/project_manager"
+API_PORT=8090
 STATE_FILE="$HOME/.hermes/scripts/tunnel_state"
 LOG_FILE="$HOME/.hermes/scripts/tunnel-rotate.log"
-GH_BASE="https://ccoolavi.github.io/project-manager"
-export PATH="$PATH:/usr/local/bin:/home/ubuntu/.local/bin"
+PAGES_URL="https://ccoolavi.github.io/project-manager"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"; }
 
 cd "$PROJECT_DIR"
 
-# ── 1. Read previous tunnel state (may be empty on first run) ──────────
-OLD_URL=""
-OLD_PID=""
-if [ -f "$STATE_FILE" ]; then
-  # shellcheck disable=SC1090
-  source "$STATE_FILE"
-fi
+OLD_URL=""; OLD_PID=""
+[ -f "$STATE_FILE" ] && source "$STATE_FILE"
 log "Previous tunnel: ${OLD_URL:-none} (pid ${OLD_PID:-none})"
 
-# ── 2. Start NEW quick tunnel while old one stays alive ────────────────
-log "Starting new quick tunnel..."
-nohup cloudflared tunnel --url http://localhost:8090 > /tmp/tunnel-new.log 2>&1 &
-NEW_PID=$!
-log "New cloudflared pid: $NEW_PID"
+# The API must be healthy before we point a new tunnel at it.
+if ! curl -sf -m 5 "http://127.0.0.1:$API_PORT/api/health" >/dev/null; then
+  log "ERROR: API is not healthy on :$API_PORT — aborting rotation."
+  exit 1
+fi
 
-# ── 3. Wait for the new URL to appear in logs ──────────────────────────
+log "Starting new quick tunnel -> http://localhost:$API_PORT"
+NEW_LOG=$(mktemp)
+setsid nohup cloudflared tunnel --url "http://localhost:$API_PORT" > "$NEW_LOG" 2>&1 < /dev/null &
+NEW_PID=$!
+
 NEW_URL=""
-for i in $(seq 1 20); do
-  NEW_URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/tunnel-new.log | tail -1 || true)
-  [ -n "$NEW_URL" ] && break
+for _ in $(seq 1 30); do
   sleep 2
+  NEW_URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$NEW_LOG" | head -1 || true)
+  [ -n "$NEW_URL" ] && break
 done
 
 if [ -z "$NEW_URL" ]; then
-  log "ERROR: failed to obtain new tunnel URL"
+  log "ERROR: new tunnel did not report a URL — killing it and keeping the old one."
   kill "$NEW_PID" 2>/dev/null || true
   exit 1
 fi
-log "New tunnel URL: $NEW_URL"
+log "New tunnel: $NEW_URL"
 
-# ── 4. Verify the new tunnel actually serves PocketBase ────────────────
-# Quick tunnels can take up to ~60s to become reachable on Cloudflare's
-# edge (DNS propagation), so poll patiently before giving up.
-HEALTHY=0
-for i in $(seq 1 45); do
-  if curl -fsS -m 8 "$NEW_URL/api/health" 2>/dev/null | grep -q "API is healthy"; then
-    HEALTHY=1
-    break
-  fi
-  if [ $((i % 5)) -eq 0 ]; then
-    log "  ...waiting for tunnel to become reachable (${i}s)"
-  fi
-  sleep 2
+# Prove the new tunnel actually serves the API before switching clients onto it.
+for _ in $(seq 1 20); do
+  if curl -sf -m 10 "$NEW_URL/api/health" >/dev/null; then break; fi
+  sleep 3
 done
-
-if [ "$HEALTHY" -ne 1 ]; then
-  log "ERROR: new tunnel not serving API, aborting rotation"
+if ! curl -sf -m 10 "$NEW_URL/api/health" >/dev/null; then
+  log "ERROR: new tunnel does not serve the API — keeping the old one."
   kill "$NEW_PID" 2>/dev/null || true
   exit 1
 fi
-log "New tunnel verified healthy (serves /api/health)"
+log "New tunnel verified healthy."
 
-# ── 5. Rebuild frontend with new URL baked in ──────────────────────────
-log "Rebuilding frontend with VITE_PB_URL=$NEW_URL..."
-sed -i "s|VITE_PB_URL: https://[^ ]*trycloudflare.com|VITE_PB_URL: $NEW_URL|g" .github/workflows/deploy.yml
-(
-  cd frontend
-  export VITE_PB_URL="$NEW_URL"
-  npm run build >> "$LOG_FILE" 2>&1
-)
-log "Frontend build complete"
+# Publish the endpoint change: one small file, in both the source tree and the
+# directory GitHub Pages serves.
+python3 - "$NEW_URL" <<'PY'
+import json, sys
+url = sys.argv[1]
+body = {
+    "apiUrl": url,
+    "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required.",
+}
+for path in ("frontend/public/config.json", "config.json"):
+    with open(path, "w") as fh:
+        json.dump(body, fh, indent=2)
+        fh.write("\n")
+PY
 
-# ── 6. Sync dist to GitHub Pages root ──────────────────────────────────
-cp frontend/dist/index.html index.html
-rm -rf assets
-cp -r frontend/dist/assets assets
-log "Assets synced to repo root"
+# Keep CORS in step with the new origin.
+if ! grep -q "trycloudflare" "$PROJECT_DIR/backend/.env"; then
+  log "Note: backend allows *.trycloudflare.com via allow_origin_regex already."
+fi
 
-# ── 7. Commit & push ───────────────────────────────────────────────────
-git add -A
-git commit -m "chore(tunnel): rotate ephemeral tunnel to $NEW_URL, fresh build" >/dev/null 2>&1 || log "Nothing new to commit"
-git push origin main >> "$LOG_FILE" 2>&1
-log "Pushed to origin/main"
+git add frontend/public/config.json config.json
+git -c user.email=deploy@kaizenpm -c user.name=deploy commit -qm "chore(tunnel): rotate API endpoint to $NEW_URL" || true
+git push -q origin main
+log "config.json published."
 
-# ── 8. Wait for GitHub Pages to serve the NEW bundle (≤3 min) ─────────
-NEW_JS=$(grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' frontend/dist/index.html | head -1)
-log "Waiting for Pages to serve $NEW_JS..."
-DEPLOYED=0
-for i in $(seq 1 18); do
-  CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 10 "$GH_BASE/$NEW_JS" || echo 000)
-  if [ "$CODE" = "200" ]; then
-    DEPLOYED=1
-    break
-  fi
+# Wait for Pages to serve the new endpoint before retiring the old tunnel.
+for _ in $(seq 1 30); do
   sleep 10
+  SERVED=$(curl -s -m 10 "$PAGES_URL/config.json?cb=$RANDOM" | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | head -1 || true)
+  if [ "$SERVED" = "$NEW_URL" ]; then
+    log "Pages now serves the new endpoint."
+    break
+  fi
 done
 
-if [ "$DEPLOYED" -ne 1 ]; then
-  log "WARNING: Pages hasn't served new bundle yet; keeping old tunnel alive as fallback"
-else
-  log "Pages serving new bundle $NEW_JS"
-fi
-
-# ── 9. Kill OLD tunnel only now (zero downtime achieved) ───────────────
-if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+if [ -n "${OLD_PID:-}" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+  log "Retiring old tunnel (pid $OLD_PID)"
   kill "$OLD_PID" 2>/dev/null || true
-  log "Killed old tunnel (pid $OLD_PID)"
 fi
 
-# ── 10. Persist new state ──────────────────────────────────────────────
+mkdir -p "$(dirname "$STATE_FILE")"
 cat > "$STATE_FILE" <<EOF
 OLD_URL="$NEW_URL"
 OLD_PID="$NEW_PID"
 EOF
-log "Rotation complete. Active: $NEW_URL"
-echo "TUNNEL_URL=$NEW_URL"
+
+log "Rotation complete: $NEW_URL"

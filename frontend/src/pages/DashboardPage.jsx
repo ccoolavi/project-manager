@@ -9,6 +9,7 @@ import ProjectList from '../components/ProjectList'
 import HabitTracker from '../components/HabitTracker'
 import TimeLogger from '../components/TimeLogger'
 import KaizenLog from '../components/KaizenLog'
+import MemberManager from '../components/MemberManager'
 import api from '../utils/api'
 
 export default function DashboardPage() {
@@ -142,6 +143,8 @@ export default function DashboardPage() {
             {/* Settings Tab */}
             {activeTab === 'settings' && (
               <div className="space-y-6">
+                <MemberManager />
+
                 <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
                   <h2 className="text-xl font-bold text-white mb-4">Organization Settings</h2>
                   <div className="space-y-4">

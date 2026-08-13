@@ -1,11 +1,17 @@
 import axios from 'axios'
-import { API_URL } from '../config'
+import { getApiUrl } from '../config'
 
 const api = axios.create({
-  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json'
   }
+})
+
+// Resolved per request rather than fixed at module load, so the runtime config
+// in config.json wins even though this module is imported before it is fetched.
+api.interceptors.request.use((config) => {
+  config.baseURL = getApiUrl()
+  return config
 })
 
 // Add JWT to requests

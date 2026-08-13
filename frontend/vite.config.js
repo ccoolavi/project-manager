@@ -16,15 +16,17 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait-primary',
         start_url: '/project-manager/',
+        // Paths must carry the base, or an installed app resolves them against
+        // the domain root and the icons 404.
         icons: [
           {
-            src: '/icons/192x192.png',
+            src: '/project-manager/icons/192x192.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any'
           },
           {
-            src: '/icons/512x512.png',
+            src: '/project-manager/icons/512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any'
@@ -33,15 +35,32 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webp}'],
+        // config.json carries the current API endpoint. Precaching it would pin
+        // the app to whatever endpoint was live at build time — exactly the
+        // coupling the runtime config exists to remove.
+        globIgnores: ['**/config.json'],
+        navigateFallbackDenylist: [/config\.json$/],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/api\./,
+            urlPattern: /config\.json$/,
+            handler: 'NetworkOnly'
+          },
+          {
+            // The API is reached through a Cloudflare tunnel, so the previous
+            // /^https:\/\/api\./ pattern never matched anything and the offline
+            // cache was silently inert.
+            urlPattern: ({ url }) =>
+              url.hostname.endsWith('trycloudflare.com') ||
+              url.pathname.startsWith('/api/'),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',
+              networkTimeoutSeconds: 10,
               expiration: {
+                maxEntries: 200,
                 maxAgeSeconds: 24 * 60 * 60
-              }
+              },
+              cacheableResponse: { statuses: [0, 200] }
             }
           }
         ]
