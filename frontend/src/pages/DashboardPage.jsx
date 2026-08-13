@@ -14,6 +14,7 @@ import MemberManager from '../components/MemberManager'
 import Ikigai from '../components/Ikigai'
 import WorkloadView from '../components/WorkloadView'
 import AnalyticsPage from './AnalyticsPage'
+import GanttView from '../components/GanttView'
 import PendingInvites from '../components/PendingInvites'
 import ActivityLog from '../components/ActivityLog'
 import api from '../utils/api'
@@ -22,6 +23,7 @@ import api from '../utils/api'
 const TAB_TITLES = {
   tasks: 'Tasks',
   projects: 'Projects',
+  timeline: 'Timeline',
   habits: 'Habits',
   time: 'Time',
   kaizen: 'Kaizen',
@@ -151,6 +153,11 @@ export default function DashboardPage() {
                   />
                 </div>
               </div>
+            )}
+
+            {/* Timeline Tab */}
+            {activeTab === 'timeline' && (
+              <GanttView />
             )}
 
             {/* Projects Tab */}
