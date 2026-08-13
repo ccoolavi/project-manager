@@ -6,59 +6,83 @@ A resource-efficient, self-hosted, full-stack project management and habit track
 
 ## 🏗 Architecture Overview
 
-- **Backend:** PocketBase v0.39 (SQLite-based, single binary, <40MB RAM) running as a systemd service (`kaizenpm-api`) on port `8090`.
-- **Database:** SQLite (`pb_data/data.db`), fully detachable and portable for future storage migration.
+- **Backend:** FastAPI + SQLAlchemy on SQLite (`backend/`), running as a systemd service (`kaizenpm-api.service`) on port `8090`.
+- **Database:** SQLite (`backend/kaizenpm.db`), a single file — fully detachable and portable for future storage migration. Back it up with `pm-cli.py db backup`.
 - **Frontend:** React 18 + Vite + TailwindCSS SPA hosted on GitHub Pages (`ccoolavi.github.io/project-manager/`).
-- **Communication:** Secure cross-origin API calls from GitHub Pages SPA to the VPS endpoint (`http://92.4.85.159:8090`).
-- **Messaging/OTP:** Integrated WhatsApp Baileys bridge (`http://127.0.0.1:3000`) for WhatsApp OTP verification and admin alerts.
+- **Communication:** The client reaches the API over HTTPS through a Cloudflare quick tunnel to `localhost:8090`. The current tunnel URL is published at runtime in `config.json` (repo root and `frontend/public/config.json`) rather than baked into the JavaScript bundle, so rotating the tunnel (`rotate-tunnel.sh`) never requires a client rebuild.
+- **Auth:** JWT bearer tokens, issued by the API and stored in browser `localStorage`. Every API route checks organisation membership; see `backend/utils/tenancy.py`.
+- **Messaging/OTP:** OTP endpoints exist (`backend/routers/otp.py`) and are designed to send codes through the Hermes WhatsApp Baileys bridge, but no delivery channel is currently configured — see `AUDIT.md` for status.
+
+Legacy PocketBase artifacts (`pocketbase` binary, `pb_hooks/`, `pb_migrations/`, `pb_data/`) remain in the repo for reference but are not used by the running application.
 
 ---
 
 ## 🚀 Key Features
 
-1. **Auth & Security:** PocketBase email/password authentication with JWT stored securely in browser `localStorage`. Protected routes redirect unauthenticated users to `/login`.
-2. **WhatsApp OTP Verification:** Custom PocketBase JS hooks (`pb_hooks/otp.pb.js`) generating 6-digit OTPs and dispatching via the Baileys WhatsApp bridge.
-3. **Multi-Organization & Hierarchy:** Organizations, Sub-Projects, and Tasks with full CRUD tied to the authenticated user via PocketBase Record Ownership (RLS).
-4. **Kanban Boards:** Interactive drag/move tasks across Todo, In Progress, Review, and Done.
-5. **Habit Tracking & Streaks:** Daily habit completion check-ins with automatic streak counting.
-6. **Kaizen Continuous Improvement Logs:** Structured problem/solution/impact logging.
-7. **Pomodoro & Time Tracking:** Time logs per project/task with active timer.
-8. **Ikigai Framework:** 4-circle life purpose planning tool (Love, Good At, World Needs, Paid For) with persistent storage.
-9. **Admin CLI (`pm-cli`):** Python CLI tool for user management, automated credential delivery via WhatsApp, DB backups, and health monitoring.
+1. **Auth & Security:** Email/password authentication (bcrypt + JWT). Every request is authorized against the caller's organisation membership and role; see `backend/middleware/auth.py` and `backend/utils/tenancy.py`.
+2. **Multi-Organisation & Hierarchy:** Organisations → Projects → Sections (sub-projects) → Tasks, with 5-tier RBAC (owner/admin/editor/member/viewer).
+3. **Kanban Boards:** Move tasks across Todo, In Progress, Review, and Done.
+4. **Habit Tracking & Streaks:** Daily habit check-ins with automatic streak counting.
+5. **Kaizen Continuous Improvement Logs:** Structured problem/solution logging, private per person.
+6. **Time Tracking:** Time entries per organisation, private per person.
+7. **Ikigai:** Four-question purpose planning tool (Love, Good At, World Needs, Paid For) plus a purpose statement, private per person.
+8. **Member Management:** Invite by email, assign roles, remove members — from the Settings tab.
+9. **Offline-first PWA:** Writes made offline are queued in IndexedDB and replayed on reconnect; see `frontend/src/utils/offlineQueue.js`.
+10. **Admin CLI (`pm-cli.py`):** stdlib-only Python CLI for account provisioning, organisation/project/task management, and database backup/restore. See `CLI.md`.
 
 ---
 
-## 🛠 Admin CLI Usage (`pm-cli`)
+## 🛠 Admin CLI Usage (`pm-cli.py`)
 
-The `pm-cli` utility is installed globally at `/usr/local/bin/pm-cli`.
+Run directly with Python — nothing to install:
 
 ```bash
 # Show help & available commands
-pm-cli help
+./pm-cli.py --help
 
-# Create a new user (auto-generates 12-char password and sends WhatsApp welcome)
-pm-cli user create --name "John Doe" --email john@example.com --phone +1234567890
+# Create a user with a generated password
+./pm-cli.py user create --name "John Doe" --email john@example.com --json
 
-# List all users
-pm-cli user list
+# List organisations you belong to
+./pm-cli.py org list
 
-# Delete a user by ID
-pm-cli user delete <user_id>
+# Backup the SQLite database (saves to backups/ with timestamp)
+./pm-cli.py db backup
 
-# List all projects
-pm-cli project list
+# Show database size and row counts per table
+./pm-cli.py db status
+```
 
-# Backup SQLite database (saves to backups/ with timestamp)
-pm-cli db backup
+Full command reference and a scripted end-to-end example: **`CLI.md`**.
 
-# Show database size and record counts per collection
-pm-cli db status
+---
+
+## 🚢 Deployment
+
+```bash
+bash deploy-frontend.sh
+```
+
+This builds the client, publishes it to the repository root (the path GitHub Pages actually serves for this repo), preserves the live `config.json`, and verifies the new bundle is reachable before reporting success. There is no separate CI/CD pipeline — this script is the deploy path.
+
+The backend is a systemd service; after any backend change:
+
+```bash
+sudo systemctl restart kaizenpm-api && sleep 3 && curl -s http://127.0.0.1:8090/api/health
 ```
 
 ---
 
 ## 📦 Resource Efficiency (6GB RAM / 1 OCPU)
 
-- **PocketBase RSS Memory:** ~25MB – 35MB
-- **Node.js WhatsApp Bridge RSS:** ~60MB – 80MB
-- **Total Footprint:** <150MB RAM (leaving 5.8GB+ free for Hermes agent and other services).
+- **FastAPI (uvicorn, 1 worker) RSS Memory:** capped at 512MB via systemd `MemoryMax`, typically well under that.
+- **SQLite:** single file, no separate database process.
+- Designed to coexist with other services already running on this box (Hermes agent, Cloudflare tunnels).
+
+---
+
+## More documentation
+
+- **`CLI.md`** — full `pm-cli.py` command reference
+- **`AUDIT.md`** — verification history, known gaps, and the standing rule that nothing is marked done without a command and its observed output
+- **`DEPLOYMENT.md`**, **`QUICKSTART.md`** — earlier deployment and quickstart notes (verify against `AUDIT.md` for current accuracy before relying on them)

@@ -12,7 +12,7 @@
         header Access-Control-Allow-Origin "{$ALLOWED_ORIGIN:https://username.github.io}"
         header Access-Control-Allow-Credentials "true"
         header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-        header Access-Control-Allow-Headers "Authorization, Content-Type, Accept, X-Requested-With, PocketBase-Token"
+        header Access-Control-Allow-Headers "Authorization, Content-Type, Accept, X-Requested-With"
         header Access-Control-Max-Age "86400"
         respond 204
     }
@@ -22,7 +22,7 @@
         Access-Control-Allow-Origin "{$ALLOWED_ORIGIN:https://username.github.io}"
         Access-Control-Allow-Credentials "true"
         Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-        Access-Control-Allow-Headers "Authorization, Content-Type, Accept, X-Requested-With, PocketBase-Token"
+        Access-Control-Allow-Headers "Authorization, Content-Type, Accept, X-Requested-With"
         X-Content-Type-Options "nosniff"
         X-Frame-Options "DENY"
         Referrer-Policy "strict-origin-when-cross-origin"
