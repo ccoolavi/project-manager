@@ -1,302 +1,61 @@
-import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
-import { HashRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import Navbar from './components/Navbar';
-import KanbanBoard from './components/KanbanBoard';
-import HabitTracker from './components/HabitTracker';
-import KaizenLog from './components/KaizenLog';
-import TimeManagement from './components/TimeManagement';
-import Organizations from './components/Organizations';
-import SubProjects from './components/SubProjects';
-import Ikigai from './components/Ikigai';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import {
-  pb,
-  getCurrentUser,
-  logoutUser,
-  validateSession,
-} from './services/pocketbase';
-import { Building2 } from 'lucide-react';
-
-const AuthContext = createContext(null);
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
-  return ctx;
-}
-
-function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function boot() {
-      // Security layer: persisted auth is trusted ONLY after server re-validates it.
-      const valid = await validateSession();
-      if (cancelled) return;
-      if (valid) {
-        setUser(getCurrentUser());
-        setToken(pb.authStore.token);
-      }
-      setLoading(false);
-    }
-
-    boot();
-
-    const unsubscribe = pb.authStore.onChange((newToken, model) => {
-      setToken(newToken);
-      setUser(model);
-    });
-    return () => { cancelled = true; unsubscribe(); };
-  }, []);
-
-  const login = useCallback(async (email, password) => {
-    const authData = await pb.collection('users').authWithPassword(email, password);
-    setUser(authData.record || authData.model);
-    setToken(pb.authStore.token);
-    return authData;
-  }, []);
-
-  const register = useCallback(async (data) => {
-    const record = await pb.collection('users').create(data);
-    const authData = await pb.collection('users').authWithPassword(data.email, data.password);
-    setUser(authData.record || authData.model);
-    setToken(pb.authStore.token);
-    return record;
-  }, []);
-
-  const logout = useCallback(() => {
-    logoutUser();
-    setUser(null);
-    setToken(null);
-  }, []);
-
-  return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './context/AuthContext'
+import { OrgProvider } from './context/OrgContext'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+import DashboardPage from './pages/DashboardPage'
+import InviteAcceptPage from './pages/InviteAcceptPage'
+import { useEffect } from 'react'
 
 function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth();
+  const { user, loading } = useAuth()
+
   if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="flex items-center space-x-3 text-slate-400">
-          <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm">Loading workspace...</span>
-        </div>
-      </div>
-    );
+    return <div className="flex items-center justify-center h-screen">Loading...</div>
   }
-  if (!user) return <Navigate to="/login" replace />;
-  return children;
+
+  return user ? children : <Navigate to="/login" />
 }
 
-function Dashboard() {
-  const navigate = useNavigate();
-  const { user, logout } = useAuth();
-
-  const [activeTab, setActiveTab] = useState('kanban');
-
-  const [organizations, setOrganizations] = useState([]);
-  const [selectedOrgId, setSelectedOrgId] = useState('');
-  const [projects, setProjects] = useState([]);
-  const [subProjects, setSubProjects] = useState([]);
-
-  const [tasks, setTasks] = useState([]);
-  const [habits, setHabits] = useState([]);
-  const [logs, setLogs] = useState([]);
-  const [timeEntries, setTimeEntries] = useState([]);
-  const [syncing, setSyncing] = useState(false);
+function AppRoutes() {
+  const { user, loading } = useAuth()
+  const { fetchOrgs } = useOrg()
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadAllData() {
-      setSyncing(true);
-      try {
-        const [orgsRes, projRes, subRes, tasksRes] = await Promise.all([
-          pb.collection('organizations').getFullList({ requestKey: null }),
-          pb.collection('projects').getFullList({ requestKey: null }),
-          pb.collection('sub_projects').getFullList({ requestKey: null }),
-          pb.collection('tasks').getFullList({ requestKey: null }),
-        ]);
-
-        if (cancelled) return;
-
-        if (orgsRes.length > 0) {
-          setOrganizations(orgsRes);
-          setSelectedOrgId((prev) => prev || orgsRes[0].id);
-        }
-        if (projRes.length > 0) setProjects(projRes);
-        if (subRes.length > 0) setSubProjects(subRes);
-        if (tasksRes.length > 0) setTasks(tasksRes);
-
-        const [h, l, timeData] = await Promise.all([
-          pb.collection('habits').getFullList({ requestKey: null }).catch(() => []),
-          pb.collection('kaizen_logs').getFullList({ requestKey: null }).catch(() => []),
-          pb.collection('time_entries').getFullList({ requestKey: null }).catch(() => []),
-        ]);
-
-        if (cancelled) return;
-        setHabits(h || []);
-        setLogs(l || []);
-        setTimeEntries(timeData || []);
-      } catch (e) {
-        if (cancelled) return;
-        if (e?.status === 401) {
-          logout();
-          navigate('/login', { replace: true });
-          return;
-        }
-        console.warn('Sync warning:', e);
-      } finally {
-        if (!cancelled) setSyncing(false);
-      }
+    if (user && !loading) {
+      fetchOrgs()
     }
-
-    loadAllData();
-    return () => { cancelled = true; };
-  }, [logout, navigate]);
-
-  const handleSetTasks = useCallback((updated) => setTasks(updated), []);
-  const handleSetHabits = useCallback((updated) => setHabits(updated), []);
-  const handleSetLogs = useCallback((updated) => setLogs(updated), []);
-  const handleSetTimeEntries = useCallback((updated) => setTimeEntries(updated), []);
-
-  const activeOrg = organizations.find((o) => o.id === selectedOrgId) || organizations[0];
-
-  const handleLogout = useCallback(() => {
-    logout();
-    navigate('/login', { replace: true });
-  }, [logout, navigate]);
+  }, [user, loading])
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-brand-500 selection:text-white">
-      <Navbar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        user={user}
-        onLogout={handleLogout}
-        organizations={organizations}
-        selectedOrgId={selectedOrgId}
-        setSelectedOrgId={setSelectedOrgId}
+    <Routes>
+      <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/dashboard" />} />
+      <Route path="/register" element={!user ? <RegisterPage /> : <Navigate to="/dashboard" />} />
+      <Route path="/invite/:token" element={<InviteAcceptPage />} />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
       />
-
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-slate-900/60 border border-slate-800 px-4 py-3 rounded-2xl backdrop-blur-sm">
-          <div className="flex items-center space-x-3">
-            {activeOrg ? (
-              <div className="flex items-center space-x-2 px-3 py-1 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-300 font-medium">
-                <Building2 className="w-3.5 h-3.5 text-brand-400" />
-                <span>Workspace: {activeOrg.name}</span>
-              </div>
-            ) : (
-              <div className="text-slate-400 font-medium">
-                No organization selected. Create one in the Organizations tab.
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center space-x-3 text-slate-400">
-            {syncing && (
-              <div className="flex items-center space-x-2 text-brand-400">
-                <div className="w-3 h-3 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-                <span>Syncing with server...</span>
-              </div>
-            )}
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span className="text-slate-300 font-medium">Connected</span>
-          </div>
-        </div>
-
-        {activeTab === 'kanban' && (
-          <KanbanBoard
-            tasks={tasks}
-            setTasks={handleSetTasks}
-            subProjects={subProjects}
-            projects={projects}
-            selectedOrgId={selectedOrgId}
-            user={user}
-          />
-        )}
-
-        {activeTab === 'sub_projects' && (
-          <SubProjects
-            subProjects={subProjects}
-            setSubProjects={setSubProjects}
-            projects={projects}
-            selectedOrgId={selectedOrgId}
-            user={user}
-          />
-        )}
-
-        {activeTab === 'organizations' && (
-          <Organizations
-            organizations={organizations}
-            setOrganizations={setOrganizations}
-            selectedOrgId={selectedOrgId}
-            setSelectedOrgId={setSelectedOrgId}
-            user={user}
-          />
-        )}
-
-        {activeTab === 'habits' && (
-          <HabitTracker habits={habits} setHabits={handleSetHabits} user={user} />
-        )}
-
-        {activeTab === 'kaizen' && (
-          <KaizenLog logs={logs} setLogs={handleSetLogs} user={user} />
-        )}
-
-        {activeTab === 'time' && (
-          <TimeManagement timeEntries={timeEntries} setTimeEntries={handleSetTimeEntries} user={user} />
-        )}
-
-        {activeTab === 'ikigai' && (
-          <Ikigai />
-        )}
-      </main>
-
-      <footer className="border-t border-slate-900 py-6 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p>&copy; 2026 KaizenPM. Secure Enterprise Workspace.</p>
-          <div className="flex items-center space-x-3 text-slate-400">
-            <span>Encrypted Cloud Sync</span>
-            <span>&bull;</span>
-            <span>Real-time DB</span>
-          </div>
-        </div>
-      </footer>
-    </div>
-  );
+      <Route path="/" element={<Navigate to="/dashboard" />} />
+    </Routes>
+  )
 }
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </Router>
-    </AuthProvider>
-  );
+    <Router>
+      <AuthProvider>
+        <OrgProvider>
+          <AppRoutes />
+        </OrgProvider>
+      </AuthProvider>
+    </Router>
+  )
 }
+
+// Import useOrg hook
+import { useOrg } from './context/OrgContext'
