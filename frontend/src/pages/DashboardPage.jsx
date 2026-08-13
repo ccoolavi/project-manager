@@ -102,18 +102,18 @@ export default function DashboardPage() {
       <Navbar />
       <div className="flex">
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-        <main className="flex-1 p-8">
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 pb-28 lg:pb-8">
           <div className="max-w-6xl mx-auto">
             <div className="flex justify-between items-center mb-8">
               <div>
-                <h1 className="text-3xl font-bold text-white">{TAB_TITLES[activeTab] || activeTab}</h1>
+                <h1 className="text-2xl sm:text-3xl font-bold text-white">{TAB_TITLES[activeTab] || activeTab}</h1>
                 <p className="text-slate-400 mt-1">Org: <span className="text-brand-400">{currentOrg?.name}</span></p>
               </div>
             </div>
 
             {/* Tasks Tab */}
             {activeTab === 'tasks' && (
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 min-w-0">
                 <div className="lg:col-span-1">
                   <ProjectList
                     selectedProjectId={selectedProjectId}
@@ -121,7 +121,7 @@ export default function DashboardPage() {
                     onSelectProject={handleSelectProject}
                   />
                 </div>
-                <div className="lg:col-span-3">
+                <div className="lg:col-span-3 min-w-0">
                   <KanbanBoard
                     projectId={selectedProjectId}
                     subProjectId={selectedSubProjectId}

@@ -93,7 +93,7 @@ export default function KanbanBoard({ projectId, subProjectId }) {
   )
 
   const Column = ({ title, status, tasks }) => (
-    <div className="bg-slate-900/50 rounded-lg p-3 flex-1 min-h-96">
+    <div className="bg-slate-900/50 rounded-lg p-3 shrink-0 w-64 lg:w-auto lg:flex-1 min-h-96">
       <h3 className="font-semibold text-white mb-3 text-sm">{title}</h3>
       <div className="space-y-2">
         {tasks.map(task => (
@@ -118,7 +118,11 @@ export default function KanbanBoard({ projectId, subProjectId }) {
   )
 
   if (!subProjectId) {
-    return <div className="text-slate-400">Select a sub-project to view tasks</div>
+    return (
+      <div className="text-slate-400 text-sm">
+        Pick a project on the left to see its tasks, or create one to get started.
+      </div>
+    )
   }
 
   return (
@@ -128,7 +132,7 @@ export default function KanbanBoard({ projectId, subProjectId }) {
           type="text"
           value={newTask}
           onChange={(e) => setNewTask(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && createTask()}
+          onKeyDown={(e) => e.key === 'Enter' && createTask()}
           placeholder="Add new task..."
           className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500"
         />
@@ -140,7 +144,7 @@ export default function KanbanBoard({ projectId, subProjectId }) {
         </button>
       </div>
 
-      <div className="flex gap-3 overflow-x-auto pb-4">
+      <div className="flex gap-3 overflow-x-auto pb-4 -mx-1 px-1">
         <Column title="To Do" status="todo" tasks={columns.todo} />
         <Column title="In Progress" status="in_progress" tasks={columns.in_progress} />
         <Column title="Review" status="review" tasks={columns.review} />
