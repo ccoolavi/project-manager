@@ -8,6 +8,7 @@ import KanbanBoard from '../components/KanbanBoard'
 import ProjectList from '../components/ProjectList'
 import HabitTracker from '../components/HabitTracker'
 import TimeLogger from '../components/TimeLogger'
+import KaizenLog from '../components/KaizenLog'
 import api from '../utils/api'
 
 export default function DashboardPage() {
@@ -133,9 +134,7 @@ export default function DashboardPage() {
 
             {/* Kaizen Tab */}
             {activeTab === 'kaizen' && (
-              <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 text-center text-slate-400">
-                <p>Kaizen logging coming soon...</p>
-              </div>
+              <KaizenLog />
             )}
 
             {/* Settings Tab */}
