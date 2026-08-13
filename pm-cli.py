@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""
-pm-cli — Admin CLI for KaizenPM (PocketBase user/project/DB management with WhatsApp notifications)
+"""pm-cli — administrative CLI for KaizenPM.
 
-Commands:
-  pm-cli user create --name NAME --email EMAIL --phone PHONE
-  pm-cli user list
-  pm-cli user delete <id>
-  pm-cli project list
-  pm-cli db backup
-  pm-cli db status
-  pm-cli help
+Talks to the FastAPI server over HTTP using only the standard library, so it runs
+anywhere Python does without installing anything. It is intended both for a human
+operator and for an agent driving the system unattended: every command accepts
+``--json`` and writes machine-readable output to stdout, with human messages on
+stderr, so output can be piped safely.
+
+Run ``pm-cli.py help`` for the command list, or see CLI.md for worked examples.
 """
+
+from __future__ import annotations
 
 import argparse
 import json
@@ -20,568 +20,485 @@ import shutil
 import string
 import sys
 import urllib.error
-import urllib.parse
 import urllib.request
 from datetime import datetime
 
-# ── Configuration ──────────────────────────────────────────────────────────────
-
-POCKETBASE_URL = os.environ.get("PM_PB_URL", "http://127.0.0.1:8090")
-WHATSAPP_BRIDGE_URL = os.environ.get("PM_WA_URL", "http://127.0.0.1:3000")
+API_URL = os.environ.get("PM_API_URL", "http://127.0.0.1:8090").rstrip("/")
 PROJECT_DIR = os.path.dirname(os.path.realpath(__file__))
-PB_DATA_DIR = os.path.join(PROJECT_DIR, "pb_data")
+DB_PATH = os.path.join(PROJECT_DIR, "backend", "kaizenpm.db")
 BACKUPS_DIR = os.path.join(PROJECT_DIR, "backups")
+TOKEN_FILE = os.path.expanduser("~/.kaizenpm-cli-token")
 
-# Superuser credentials — env var fallback to hardcoded defaults
-SUPERUSER_EMAIL = os.environ.get("PM_SUPERUSER_EMAIL", "avisolat18@gmail.com")
-SUPERUSER_PASSWORD = os.environ.get("PM_SUPERUSER_PASSWORD", "admin123123")
-
-# ── ANSI Colors ────────────────────────────────────────────────────────────────
-
-class Color:
-    GREEN = '\033[92m'
-    RED = '\033[91m'
-    YELLOW = '\033[93m'
-    CYAN = '\033[96m'
-    BOLD = '\033[1m'
-    RESET = '\033[0m'
-    GRAY = '\033[90m'
+JSON_MODE = False
 
 
-def green(text):
-    return f"{Color.GREEN}{text}{Color.RESET}"
+# ── output ────────────────────────────────────────────────────────────────────
+
+def info(msg: str) -> None:
+    """Human-facing message. Goes to stderr so stdout stays pipeable."""
+    if not JSON_MODE:
+        print(msg, file=sys.stderr)
 
 
-def red(text):
-    return f"{Color.RED}{text}{Color.RESET}"
+def die(msg: str, code: int = 1):
+    if JSON_MODE:
+        json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+        print()
+    else:
+        print(f"error: {msg}", file=sys.stderr)
+    sys.exit(code)
 
 
-def yellow(text):
-    return f"{Color.YELLOW}{text}{Color.RESET}"
+def emit(data, table=None) -> None:
+    """Print a result: JSON when --json, otherwise a readable table."""
+    if JSON_MODE:
+        json.dump({"ok": True, "data": data}, sys.stdout, indent=2, default=str)
+        print()
+        return
+    if table and isinstance(data, list):
+        if not data:
+            print("(none)")
+            return
+        widths = [
+            max(len(str(h)), max(len(str(r.get(k, ""))) for r in data))
+            for h, k in table
+        ]
+        print("  ".join(h.ljust(w) for (h, _), w in zip(table, widths)))
+        print("  ".join("-" * w for w in widths))
+        for row in data:
+            print("  ".join(str(row.get(k, "")).ljust(w) for (_, k), w in zip(table, widths)))
+        return
+    print(json.dumps(data, indent=2, default=str))
 
 
-def cyan(text):
-    return f"{Color.CYAN}{text}{Color.RESET}"
+# ── http ──────────────────────────────────────────────────────────────────────
 
-
-def bold(text):
-    return f"{Color.BOLD}{text}{Color.RESET}"
-
-
-def gray(text):
-    return f"{Color.GRAY}{text}{Color.RESET}"
-
-
-# ── PocketBase API helpers ─────────────────────────────────────────────────────
-
-def _api_request(method, path, data=None, token=None, params=None, expect_empty=False):
-    """Make a JSON API request to PocketBase."""
-    url = f"{POCKETBASE_URL}{path}"
-    if params:
-        qs = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in params.items())
-        url = f"{url}?{qs}"
-
-    headers = {"Content-Type": "application/json"}
+def request(method: str, path: str, body=None, token=None, allow_fail=False):
+    url = f"{API_URL}{path}"
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, method=method)
+    req.add_header("Content-Type", "application/json")
     if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    body = json.dumps(data).encode("utf-8") if data else None
-    req = urllib.request.Request(url, data=body, headers=headers, method=method)
-
+        req.add_header("Authorization", f"Bearer {token}")
     try:
-        with urllib.request.urlopen(req) as resp:
-            raw = resp.read().decode("utf-8")
-            if expect_empty:
-                return None
-            if not raw:
-                return None
-            return json.loads(raw)
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8") if e.fp else "{}"
+        with urllib.request.urlopen(req, timeout=30) as res:
+            raw = res.read().decode()
+            return json.loads(raw) if raw else {}
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode()
         try:
-            error_data = json.loads(error_body)
-        except json.JSONDecodeError:
-            error_data = {"message": error_body}
-        msg = error_data.get("message", str(e)) if isinstance(error_data, dict) else str(error_data)
-        raise RuntimeError(f"API error {e.code}: {msg}")
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"Connection failed: {e.reason}")
+            detail = json.loads(detail).get("detail", detail)
+        except Exception:
+            pass
+        if allow_fail:
+            return {"_error": detail, "_status": exc.code}
+        die(f"{method} {path} -> {exc.code}: {detail}")
+    except urllib.error.URLError as exc:
+        die(f"cannot reach the API at {API_URL}: {exc.reason}")
 
 
-def _superuser_auth():
-    """Authenticate as superuser and return a token."""
-    data = _api_request(
-        "POST",
-        "/api/collections/_superusers/auth-with-password",
-        {"identity": SUPERUSER_EMAIL, "password": SUPERUSER_PASSWORD},
+def save_token(token: str) -> None:
+    with open(TOKEN_FILE, "w") as fh:
+        fh.write(token)
+    os.chmod(TOKEN_FILE, 0o600)
+
+
+def load_token() -> str:
+    env = os.environ.get("PM_TOKEN")
+    if env:
+        return env
+    if not os.path.exists(TOKEN_FILE):
+        die("not signed in — run: pm-cli.py login --email EMAIL --password PASSWORD")
+    with open(TOKEN_FILE) as fh:
+        return fh.read().strip()
+
+
+def generate_password(length: int = 16) -> str:
+    """A readable but strong password: no characters that look alike."""
+    alphabet = (
+        string.ascii_lowercase.replace("l", "").replace("o", "")
+        + string.ascii_uppercase.replace("I", "").replace("O", "")
+        + string.digits.replace("0", "").replace("1", "")
     )
-    return data["token"]
+    # Guarantee the mix the server's own validation expects.
+    while True:
+        pw = "".join(secrets.choice(alphabet) for _ in range(length))
+        if any(c.isupper() for c in pw) and any(c.islower() for c in pw) and any(c.isdigit() for c in pw):
+            return pw
 
 
-def _get_records(collection, token, **params):
-    """Fetch all records from a collection (handles pagination)."""
-    params.setdefault("perPage", 100)
-    params.setdefault("page", 1)
-    result = _api_request("GET", f"/api/collections/{collection}/records", token=token, params=params)
-    items = result.get("items", [])
-    total = result.get("totalItems", 0)
-    per_page = result.get("perPage", 100)
-    page = result.get("page", 1)
-    total_pages = result.get("totalPages", 1)
+# ── commands ──────────────────────────────────────────────────────────────────
 
-    while page < total_pages:
-        page += 1
-        params["page"] = page
-        next_page = _api_request("GET", f"/api/collections/{collection}/records", token=token, params=params)
-        items.extend(next_page.get("items", []))
-
-    return items
+def cmd_health(args):
+    emit(request("GET", "/api/health"))
 
 
-def _get_record(collection, record_id, token):
-    """Get a single record by ID."""
-    return _api_request("GET", f"/api/collections/{collection}/records/{record_id}", token=token)
+def cmd_login(args):
+    res = request("POST", "/api/auth/login", {"email": args.email, "password": args.password})
+    save_token(res["access_token"])
+    info(f"signed in as {res['user']['email']}")
+    emit({"email": res["user"]["email"], "name": res["user"]["name"]})
 
 
-def _create_record(collection, data, token):
-    """Create a record in a collection."""
-    return _api_request("POST", f"/api/collections/{collection}/records", data=data, token=token)
+def cmd_whoami(args):
+    token = load_token()
+    payload = token.split(".")[1]
+    payload += "=" * (-len(payload) % 4)
+    import base64
 
+    claims = json.loads(base64.urlsafe_b64decode(payload))
+    emit({
+        "user_id": claims.get("sub"),
+        "email": claims.get("email"),
+        "org_id": claims.get("org_id"),
+        "role": claims.get("role"),
+        "permissions": claims.get("permissions", []),
+    })
 
-def _delete_record(collection, record_id, token):
-    """Delete a record by ID. Returns True on success."""
-    _api_request("DELETE", f"/api/collections/{collection}/records/{record_id}", token=token, expect_empty=True)
-    return True
-
-
-# ── WhatsApp bridge helper ────────────────────────────────────────────────────
-
-def _phone_to_jid(phone):
-    """Convert a phone number to WhatsApp JID format.
-    +919999999999 -> 919999999999@s.whatsapp.net
-    """
-    cleaned = phone.strip()
-    # Remove leading + if present
-    if cleaned.startswith("+"):
-        cleaned = cleaned[1:]
-    # Remove any non-digit characters (spaces, dashes, parens)
-    cleaned = "".join(c for c in cleaned if c.isdigit())
-    return f"{cleaned}@s.whatsapp.net"
-
-
-def _send_whatsapp(to_jid, message_text):
-    """Send a WhatsApp message via the Baileys bridge."""
-    url = f"{WHATSAPP_BRIDGE_URL}/send"
-    data = {"chatId": to_jid, "message": message_text}
-    body = json.dumps(data).encode("utf-8")
-    req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            raw = resp.read().decode("utf-8")
-            return json.loads(raw)
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8") if e.fp else "{}"
-        try:
-            error_data = json.loads(error_body)
-        except json.JSONDecodeError:
-            error_data = {"message": error_body}
-        msg = error_data.get("message", error_data.get("error", str(e))) if isinstance(error_data, dict) else str(error_data)
-        raise RuntimeError(f"WhatsApp API error {e.code}: {msg}")
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"WhatsApp bridge unreachable: {e.reason}")
-
-
-# ── Password generation ───────────────────────────────────────────────────────
-
-def _generate_password(length=12):
-    """Generate a random alphanumeric password."""
-    alphabet = string.ascii_letters + string.digits
-    return "".join(secrets.choice(alphabet) for _ in range(length))
-
-
-# ── DB helpers ────────────────────────────────────────────────────────────────
-
-def _db_size_bytes():
-    """Return the size of the PocketBase data.db file in bytes, or None."""
-    db_path = os.path.join(PB_DATA_DIR, "data.db")
-    try:
-        return os.path.getsize(db_path)
-    except OSError:
-        return None
-
-
-def _format_bytes(size):
-    """Format byte count to human-readable string."""
-    if size is None:
-        return "N/A"
-    for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024:
-            return f"{size:.1f} {unit}"
-        size /= 1024
-    return f"{size:.1f} TB"
-
-
-# ── Subcommands ───────────────────────────────────────────────────────────────
 
 def cmd_user_create(args):
-    """Create a new user with random password and send credentials via WhatsApp."""
-    token = _superuser_auth()
-    password = _generate_password()
+    """Provision an account with a generated password, for handing to a person.
 
-    data = {
-        "email": args.email,
-        "password": password,
-        "passwordConfirm": password,
-        "name": args.name,
-    }
-    if args.phone:
-        data["phone"] = args.phone
+    This covers the requirement that an administrator creates the account and the
+    user then signs in and completes their own profile.
+    """
+    password = args.password or generate_password()
+    res = request(
+        "POST",
+        "/api/auth/register",
+        {
+            "name": args.name,
+            "email": args.email,
+            "password": password,
+            "confirm_password": password,
+        },
+        allow_fail=True,
+    )
+    if "_error" in res:
+        die(f"could not create the account: {res['_error']}")
 
-    try:
-        user = _create_record("users", data, token)
-    except RuntimeError as e:
-        print(f"  {red('✗')} Failed to create user: {e}")
-        sys.exit(1)
+    info(f"created {args.email}")
+    info("Give the person these details; they should change the password after signing in.")
 
-    print(f"  {green('✓')} User created successfully!")
-    print(f"    {bold('ID:')}    {user['id']}")
-    print(f"    {bold('Name:')}  {user.get('name', 'N/A')}")
-    print(f"    {bold('Email:')} {user.get('email', 'N/A')}")
-    if args.phone:
-        print(f"    {bold('Phone:')} {user.get('phone', 'N/A')}")
-    print(f"    {bold('Password:')} {yellow(password)}")
+    result = {"email": args.email, "name": args.name, "password": password}
 
-    # Send WhatsApp notification if phone was provided
-    if args.phone:
-        try:
-            jid = _phone_to_jid(args.phone)
-            wa_message = (
-                f"🎉 *Welcome to KaizenPM!*\n\n"
-                f"Your account has been created.\n\n"
-                f"📧 *Email:* {args.email}\n"
-                f"🔑 *Password:* `{password}`\n\n"
-                f"Please login and change your password.\n"
-                f"Project Manager - KaizenPM"
-            )
-            result = _send_whatsapp(jid, wa_message)
-            print(f"  {green('✓')} WhatsApp welcome message sent to {args.phone}")
-        except RuntimeError as e:
-            print(f"  {yellow('⚠')} Could not send WhatsApp: {e}")
-    else:
-        print(f"  {yellow('⚠')} No phone number provided — skipping WhatsApp notification")
+    if args.org:
+        token = load_token()
+        added = request(
+            "POST",
+            f"/api/orgs/{args.org}/members",
+            {"email": args.email, "role": args.role},
+            token=token,
+            allow_fail=True,
+        )
+        result["organization"] = args.org
+        result["role"] = args.role
+        result["added"] = "_error" not in added
+        if "_error" in added:
+            result["add_error"] = added["_error"]
 
-    print()
-    return user
+    emit(result)
 
 
-def cmd_user_list(args):
-    """List all users."""
-    token = _superuser_auth()
-    users = _get_records("users", token, sort="created")
-
-    if not users:
-        print(f"  {yellow('No users found.')}")
-        return
-
-    print(f"  {bold(f'Users ({len(users)})')}")
-    print(f"  {gray('─' * 78)}")
-
-    for u in users:
-        role = u.get("role", "user") or "user"
-        verified = u.get("verified", False)
-        phone = u.get("phone", "") or ""
-        wa_verified = u.get("whatsapp_verified", False)
-
-        verified_str = green("✓") if verified else red("✗")
-        wa_str = green("✓") if wa_verified else gray("–")
-
-        print(f"  {bold(u['id'])}")
-        print(f"    Name:     {u.get('name', 'N/A')}")
-        print(f"    Email:    {u.get('email', 'N/A')}")
-        print(f"    Phone:    {phone or gray('–')}")
-        print(f"    Role:     {cyan(role)}")
-        print(f"    Verified: {verified_str}   WA: {wa_str}")
-        print(f"    Created:  {u.get('created', 'N/A')}")
-        print()
-
-    total = len(users)
-    print(f"  {bold(f'Total: {total} user{"s" if total != 1 else ""}')}")
-    print()
+def cmd_org_list(args):
+    orgs = request("GET", "/api/orgs", token=load_token())
+    emit(orgs, table=[("ID", "id"), ("NAME", "name"), ("DESCRIPTION", "description")])
 
 
-def cmd_user_delete(args):
-    """Delete a user by ID."""
-    token = _superuser_auth()
-    user_id = args.id
+def cmd_org_create(args):
+    org = request("POST", "/api/orgs", {"name": args.name, "description": args.description or ""}, token=load_token())
+    info(f"created organisation {org['id']}")
+    emit(org)
 
-    # Check if user exists first
-    try:
-        user = _get_record("users", user_id, token)
-    except RuntimeError as e:
-        print(f"  {red('✗')} User not found: {e}")
-        sys.exit(1)
 
-    name = user.get("name", user.get("email", user_id))
-    print(f"  {yellow('⚠')} Deleting user: {bold(name)} ({user_id})")
+def cmd_org_members(args):
+    members = request("GET", f"/api/orgs/{args.org}/members", token=load_token())
+    rows = [
+        {
+            "id": m["id"],
+            "name": (m.get("user") or {}).get("name", ""),
+            "email": (m.get("user") or {}).get("email", ""),
+            "role": m["role"],
+        }
+        for m in members
+    ]
+    emit(rows, table=[("ID", "id"), ("NAME", "name"), ("EMAIL", "email"), ("ROLE", "role")])
 
-    try:
-        _delete_record("users", user_id, token)
-    except RuntimeError as e:
-        print(f"  {red('✗')} Failed to delete user: {e}")
-        sys.exit(1)
 
-    print(f"  {green('✓')} User deleted successfully!")
-    print()
+def cmd_org_invite(args):
+    res = request(
+        "POST",
+        f"/api/orgs/{args.org}/members",
+        {"email": args.email, "role": args.role},
+        token=load_token(),
+    )
+    emit(res)
 
 
 def cmd_project_list(args):
-    """List all projects."""
-    token = _superuser_auth()
-    projects = _get_records("projects", token, sort="-id")
+    projects = request("GET", f"/api/orgs/{args.org}/projects", token=load_token())
+    emit(projects, table=[("ID", "id"), ("NAME", "name"), ("STATUS", "status")])
 
-    if not projects:
-        print(f"  {yellow('No projects found.')}")
-        return
 
-    print(f"  {bold(f'Projects ({len(projects)})')}")
-    print(f"  {gray('─' * 78)}")
+def cmd_project_create(args):
+    token = load_token()
+    project = request(
+        "POST",
+        f"/api/orgs/{args.org}/projects",
+        {"name": args.name, "description": args.description or "", "status": "active"},
+        token=token,
+    )
+    # Mirror the UI: a project without a section has nowhere to put tasks.
+    section = request(
+        "POST",
+        f"/api/orgs/{args.org}/projects/{project['id']}/sub-projects",
+        {"name": args.section, "status": "active"},
+        token=token,
+    )
+    info(f"created project {project['id']} with section {section['id']}")
+    emit({"project": project, "section": section})
 
-    for p in projects:
-        status = p.get("status", "active") or "active"
-        user_rel = p.get("user", "") or ""
-        org_rel = p.get("organization", "") or ""
-        name = p.get("name", "Unnamed")
-        desc = p.get("description", "") or ""
 
-        print(f"  {bold(p['id'])}")
-        print(f"    Name:     {name}")
-        if desc:
-            print(f"    Desc:     {desc[:80]}{'…' if len(desc) > 80 else ''}")
-        print(f"    Status:   {cyan(status)}")
-        print(f"    User ID:  {user_rel or gray('–')}")
-        print(f"    Org ID:   {org_rel or gray('–')}")
-        print(f"    Created:  {p.get('created', 'N/A')}")
-        print()
+def cmd_section_list(args):
+    subs = request(
+        "GET", f"/api/orgs/{args.org}/projects/{args.project}/sub-projects", token=load_token()
+    )
+    emit(subs, table=[("ID", "id"), ("NAME", "name"), ("STATUS", "status")])
 
-    total = len(projects)
-    print(f"  {bold(f'Total: {total} project{"s" if total != 1 else ""}')}")
-    print()
+
+def cmd_task_list(args):
+    tasks = request(
+        "GET",
+        f"/api/orgs/{args.org}/projects/{args.project}/tasks/{args.section}",
+        token=load_token(),
+    )
+    emit(tasks, table=[("ID", "id"), ("TITLE", "title"), ("STATUS", "status"), ("PRIORITY", "priority")])
+
+
+def cmd_task_create(args):
+    task = request(
+        "POST",
+        f"/api/orgs/{args.org}/projects/{args.project}/tasks/{args.section}",
+        {"title": args.title, "description": args.description or "", "status": "todo", "priority": args.priority},
+        token=load_token(),
+    )
+    info(f"created task {task['id']}")
+    emit(task)
+
+
+def cmd_task_move(args):
+    task = request(
+        "PUT",
+        f"/api/orgs/{args.org}/projects/{args.project}/tasks/{args.section}/{args.task}",
+        {"status": args.status},
+        token=load_token(),
+    )
+    emit(task)
+
+
+def cmd_habit_list(args):
+    habits = request("GET", f"/api/orgs/{args.org}/habits", token=load_token())
+    emit(habits, table=[("ID", "id"), ("TITLE", "title"), ("STREAK", "streak"), ("TARGET", "target_days")])
+
+
+def cmd_habit_check(args):
+    emit(request("POST", f"/api/orgs/{args.org}/habits/{args.habit}/check", token=load_token()))
+
+
+def cmd_time_log(args):
+    entry = request(
+        "POST",
+        f"/api/orgs/{args.org}/time",
+        {"duration_minutes": args.minutes, "category": args.category},
+        token=load_token(),
+    )
+    emit(entry)
+
+
+def cmd_kaizen_log(args):
+    log = request(
+        "POST",
+        f"/api/orgs/{args.org}/kaizen",
+        {"title": args.title, "problem": args.problem, "solution": args.solution, "category": args.category},
+        token=load_token(),
+    )
+    emit(log)
 
 
 def cmd_db_backup(args):
-    """Backup the PocketBase data.db to backups/ with timestamp."""
-    db_path = os.path.join(PB_DATA_DIR, "data.db")
+    """Copy the SQLite database aside.
 
-    if not os.path.isfile(db_path):
-        print(f"  {red('✗')} Database file not found at: {db_path}")
-        sys.exit(1)
-
-    # Create backups dir
+    The database is a single file on purpose, so it can be moved to another host
+    later without a migration exercise.
+    """
+    if not os.path.exists(DB_PATH):
+        die(f"database not found at {DB_PATH}")
     os.makedirs(BACKUPS_DIR, exist_ok=True)
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_name = f"data_{timestamp}.db"
-    backup_path = os.path.join(BACKUPS_DIR, backup_name)
-
-    try:
-        shutil.copy2(db_path, backup_path)
-    except OSError as e:
-        print(f"  {red('✗')} Backup failed: {e}")
-        sys.exit(1)
-
-    original_size = _db_size_bytes()
-    backup_size = os.path.getsize(backup_path)
-
-    print(f"  {green('✓')} Database backup created!")
-    print(f"    {bold('Source:')}  {db_path}")
-    print(f"    {bold('Backup:')}  {backup_path}")
-    print(f"    {bold('Size:')}    {_format_bytes(backup_size)}")
-
-    if original_size and original_size != backup_size:
-        print(f"    {yellow('⚠')} Size mismatch: source={_format_bytes(original_size)} backup={_format_bytes(backup_size)}")
-    print()
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest = os.path.join(BACKUPS_DIR, f"kaizenpm_{stamp}.db")
+    shutil.copy2(DB_PATH, dest)
+    info(f"backed up to {dest}")
+    emit({"backup": dest, "bytes": os.path.getsize(dest)})
 
 
 def cmd_db_status(args):
-    """Show database file size and record counts per collection."""
-    token = _superuser_auth()
+    import sqlite3
 
-    # DB file info
-    db_path = os.path.join(PB_DATA_DIR, "data.db")
-    db_size = _db_size_bytes()
-
-    print(f"  {bold('Database Status')}")
-    print(f"  {gray('─' * 40)}")
-    print(f"    {bold('File:')}  {db_path}")
-    print(f"    {bold('Size:')}  {_format_bytes(db_size)}")
-    print()
-
-    # Collection record counts
-    print(f"  {bold('Collections')}")
-    print(f"  {gray('─' * 40)}")
-
-    collections_to_check = [
-        "users",
-        "projects",
-        "sub_projects",
-        "tasks",
-        "kanban_boards",
-        "habits",
-        "kaizen_logs",
-        "time_logs",
-        "organizations",
-        "organization_members",
-    ]
-
-    total_records = 0
-    for coll_name in collections_to_check:
+    if not os.path.exists(DB_PATH):
+        die(f"database not found at {DB_PATH}")
+    conn = sqlite3.connect(DB_PATH)
+    tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+    counts = {}
+    for t in tables:
         try:
-            result = _api_request(
-                "GET",
-                f"/api/collections/{coll_name}/records",
-                token=token,
-                params={"perPage": 1, "page": 1},
-            )
-            count = result.get("totalItems", 0)
-            total_records += count
-            print(f"    {coll_name:22s}  {green(str(count))}")
-        except RuntimeError:
-            print(f"    {coll_name:22s}  {red('error')}")
-
-    print(f"    {gray('─' * 40)}")
-    print(f"    {'Total':22s}  {bold(str(total_records))}")
-    print()
+            counts[t] = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+        except sqlite3.Error:
+            counts[t] = None
+    conn.close()
+    emit({"path": DB_PATH, "bytes": os.path.getsize(DB_PATH), "rows": counts})
 
 
-def cmd_help(args):
-    """Show help message."""
-    print(f"""
-{bold('pm-cli — KaizenPM Admin CLI')}
-{cyan('=' * 50)}
-
-{green('USER MANAGEMENT')}
-  {bold('pm-cli user create --name NAME --email EMAIL --phone PHONE')}
-    Create a new user, generate random password, send via WhatsApp
-
-  {bold('pm-cli user list')}
-    List all users with details
-
-  {bold('pm-cli user delete <id>')}
-    Delete a user by their ID
-
-{green('PROJECT MANAGEMENT')}
-  {bold('pm-cli project list')}
-    List all projects
-
-{green('DATABASE')}
-  {bold('pm-cli db backup')}
-    Backup pb_data/data.db to backups/ with timestamp
-
-  {bold('pm-cli db status')}
-    Show database file size and record counts per collection
-
-{green('GENERAL')}
-  {bold('pm-cli help')}
-    Show this help message
-
-{green('ENVIRONMENT VARIABLES')}
-  {bold('PM_SUPERUSER_EMAIL')}      PocketBase superuser email (default: avisolat18@gmail.com)
-  {bold('PM_SUPERUSER_PASSWORD')}   PocketBase superuser password
-  {bold('PM_PB_URL')}               PocketBase URL (default: http://127.0.0.1:8090)
-  {bold('PM_WA_URL')}               WhatsApp bridge URL (default: http://127.0.0.1:3000)
-""")
+def cmd_db_restore(args):
+    if not os.path.exists(args.backup):
+        die(f"backup not found: {args.backup}")
+    if os.path.exists(DB_PATH):
+        safety = f"{DB_PATH}.before-restore"
+        shutil.copy2(DB_PATH, safety)
+        info(f"current database preserved at {safety}")
+    shutil.copy2(args.backup, DB_PATH)
+    info("restored — restart the API: sudo systemctl restart kaizenpm-api")
+    emit({"restored_from": args.backup})
 
 
-# ── Argument parsing ──────────────────────────────────────────────────────────
+# ── argument parsing ──────────────────────────────────────────────────────────
 
-def build_parser():
-    parser = argparse.ArgumentParser(
-        prog="pm-cli",
-        description="KaizenPM Admin CLI — user, project, and database management",
-        add_help=False,
+def build_parser() -> argparse.ArgumentParser:
+    # --json is attached to every subcommand as well as the top level, so both
+    # "pm-cli --json health" and "pm-cli health --json" work. An agent should not
+    # have to remember where the flag goes.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--json", action="store_true", help="machine-readable output on stdout")
+
+    p = argparse.ArgumentParser(
+        prog="pm-cli.py", description="KaizenPM administrative CLI", parents=[common]
     )
-    subparsers = parser.add_subparsers(dest="command")
+    sub = p.add_subparsers(dest="command")
 
-    # user
-    user_parser = subparsers.add_parser("user", help="User management")
-    user_subparsers = user_parser.add_subparsers(dest="subcommand")
+    def add(parent, name, **kw):
+        return parent.add_parser(name, parents=[common], **kw)
 
-    user_create = user_subparsers.add_parser("create", help="Create a new user")
-    user_create.add_argument("--name", required=True, help="User's full name")
-    user_create.add_argument("--email", required=True, help="User's email address")
-    user_create.add_argument("--phone", default="", help="User's phone number (with country code, e.g. +919999999999)")
+    add(sub, "health", help="check that the API is up").set_defaults(func=cmd_health)
 
-    user_list = user_subparsers.add_parser("list", help="List all users")
+    lg = add(sub, "login", help="sign in and cache a token")
+    lg.add_argument("--email", required=True)
+    lg.add_argument("--password", required=True)
+    lg.set_defaults(func=cmd_login)
 
-    user_delete = user_subparsers.add_parser("delete", help="Delete a user")
-    user_delete.add_argument("id", help="User ID to delete")
+    add(sub, "whoami", help="show the cached session's identity and role").set_defaults(func=cmd_whoami)
 
-    # project
-    project_parser = subparsers.add_parser("project", help="Project management")
-    project_subparsers = project_parser.add_subparsers(dest="subcommand")
-    project_list = project_subparsers.add_parser("list", help="List all projects")
+    user = sub.add_parser("user", help="account administration").add_subparsers(dest="sub")
+    uc = add(user, "create", help="create an account with a generated password")
+    uc.add_argument("--name", required=True)
+    uc.add_argument("--email", required=True)
+    uc.add_argument("--password", help="use a specific password instead of generating one")
+    uc.add_argument("--org", type=int, help="also add them to this organisation")
+    uc.add_argument("--role", default="member", choices=["admin", "editor", "member", "viewer"])
+    uc.set_defaults(func=cmd_user_create)
 
-    # db
-    db_parser = subparsers.add_parser("db", help="Database management")
-    db_subparsers = db_parser.add_subparsers(dest="subcommand")
-    db_parser_backup = db_subparsers.add_parser("backup", help="Backup the database")
-    db_parser_status = db_subparsers.add_parser("status", help="Show database status")
+    org = sub.add_parser("org", help="organisations").add_subparsers(dest="sub")
+    add(org, "list").set_defaults(func=cmd_org_list)
+    oc = add(org, "create")
+    oc.add_argument("--name", required=True)
+    oc.add_argument("--description")
+    oc.set_defaults(func=cmd_org_create)
+    om = add(org, "members")
+    om.add_argument("--org", type=int, required=True)
+    om.set_defaults(func=cmd_org_members)
+    oi = add(org, "invite")
+    oi.add_argument("--org", type=int, required=True)
+    oi.add_argument("--email", required=True)
+    oi.add_argument("--role", default="member", choices=["admin", "editor", "member", "viewer"])
+    oi.set_defaults(func=cmd_org_invite)
 
-    # help
-    subparsers.add_parser("help", help="Show this help message")
+    proj = sub.add_parser("project", help="projects").add_subparsers(dest="sub")
+    pl = add(proj, "list")
+    pl.add_argument("--org", type=int, required=True)
+    pl.set_defaults(func=cmd_project_list)
+    pc = add(proj, "create")
+    pc.add_argument("--org", type=int, required=True)
+    pc.add_argument("--name", required=True)
+    pc.add_argument("--description")
+    pc.add_argument("--section", default="General", help="name of the initial section")
+    pc.set_defaults(func=cmd_project_create)
 
-    return parser
+    sec = sub.add_parser("section", help="sections within a project").add_subparsers(dest="sub")
+    sl = add(sec, "list")
+    sl.add_argument("--org", type=int, required=True)
+    sl.add_argument("--project", type=int, required=True)
+    sl.set_defaults(func=cmd_section_list)
+
+    task = sub.add_parser("task", help="tasks").add_subparsers(dest="sub")
+    tl = add(task, "list")
+    for a in ("--org", "--project", "--section"):
+        tl.add_argument(a, type=int, required=True)
+    tl.set_defaults(func=cmd_task_list)
+    tc = add(task, "create")
+    for a in ("--org", "--project", "--section"):
+        tc.add_argument(a, type=int, required=True)
+    tc.add_argument("--title", required=True)
+    tc.add_argument("--description")
+    tc.add_argument("--priority", default="medium", choices=["low", "medium", "high", "urgent"])
+    tc.set_defaults(func=cmd_task_create)
+    tm = add(task, "move")
+    for a in ("--org", "--project", "--section", "--task"):
+        tm.add_argument(a, type=int, required=True)
+    tm.add_argument("--status", required=True, choices=["todo", "in_progress", "review", "done"])
+    tm.set_defaults(func=cmd_task_move)
+
+    habit = sub.add_parser("habit", help="habits").add_subparsers(dest="sub")
+    hl = add(habit, "list")
+    hl.add_argument("--org", type=int, required=True)
+    hl.set_defaults(func=cmd_habit_list)
+    hc = add(habit, "check")
+    hc.add_argument("--org", type=int, required=True)
+    hc.add_argument("--habit", type=int, required=True)
+    hc.set_defaults(func=cmd_habit_check)
+
+    tme = sub.add_parser("time", help="time tracking").add_subparsers(dest="sub")
+    tlg = add(tme, "log")
+    tlg.add_argument("--org", type=int, required=True)
+    tlg.add_argument("--minutes", type=int, required=True)
+    tlg.add_argument("--category", default="general")
+    tlg.set_defaults(func=cmd_time_log)
+
+    kz = sub.add_parser("kaizen", help="improvement log").add_subparsers(dest="sub")
+    kl = add(kz, "log")
+    kl.add_argument("--org", type=int, required=True)
+    kl.add_argument("--title", required=True)
+    kl.add_argument("--problem", default="")
+    kl.add_argument("--solution", default="")
+    kl.add_argument("--category", default="productivity")
+    kl.set_defaults(func=cmd_kaizen_log)
+
+    db = sub.add_parser("db", help="database maintenance").add_subparsers(dest="sub")
+    add(db, "backup").set_defaults(func=cmd_db_backup)
+    add(db, "status").set_defaults(func=cmd_db_status)
+    dr = add(db, "restore")
+    dr.add_argument("--backup", required=True)
+    dr.set_defaults(func=cmd_db_restore)
+
+    return p
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
-
-def main():
+def main() -> None:
+    global JSON_MODE
     parser = build_parser()
     args = parser.parse_args()
-
-    if not args.command:
+    JSON_MODE = getattr(args, "json", False)
+    if not hasattr(args, "func"):
         parser.print_help()
-        sys.exit(0)
-
-    if args.command == "help":
-        cmd_help(args)
-        return
-
-    if args.command == "user":
-        if not hasattr(args, "subcommand") or not args.subcommand:
-            print(f"{red('Please specify a user subcommand: create, list, or delete')}")
-            print(f"Run {bold('pm-cli help')} for usage.")
-            sys.exit(1)
-
-        cmds = {
-            "create": cmd_user_create,
-            "list": cmd_user_list,
-            "delete": cmd_user_delete,
-        }
-        cmds[args.subcommand](args)
-
-    elif args.command == "project":
-        if not hasattr(args, "subcommand") or not args.subcommand:
-            print(f"{red('Please specify a project subcommand: list')}")
-            print(f"Run {bold('pm-cli help')} for usage.")
-            sys.exit(1)
-
-        cmds = {
-            "list": cmd_project_list,
-        }
-        cmds[args.subcommand](args)
-
-    elif args.command == "db":
-        if not hasattr(args, "subcommand") or not args.subcommand:
-            print(f"{red('Please specify a db subcommand: backup or status')}")
-            print(f"Run {bold('pm-cli help')} for usage.")
-            sys.exit(1)
-
-        cmds = {
-            "backup": cmd_db_backup,
-            "status": cmd_db_status,
-        }
-        cmds[args.subcommand](args)
+        sys.exit(1)
+    args.func(args)
 
 
 if __name__ == "__main__":
