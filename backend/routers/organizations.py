@@ -17,6 +17,7 @@ from utils.audit import record
 from utils.action_otp import require_recent_action_otp
 from utils.notifications import notify
 from utils.tenancy import require_membership
+from utils.security import hash_password, generate_password
 from middleware.auth import (
     get_current_user, get_current_org_id, require_org_role
 )
@@ -134,28 +135,35 @@ async def add_member(
     if user_role not in ["owner", "admin"]:
         raise HTTPException(status_code=403, detail="Only admins can add members")
 
-    # Create invite
-    expires_at = datetime.utcnow() + timedelta(days=7)
-    new_invite = OrganizationInvite(
-        organization_id=org_id,
-        email=invite.email,
-        role=invite.role,
-        created_by=user_id,
-        expires_at=expires_at
-    )
-    db.add(new_invite)
-    db.commit()
-
-    # If user already exists, auto-add to org
+    # If the invitee already has an account, add them straight away — same
+    # behavior as before. If not, provision the account here rather than
+    # leaving a pending invite with nothing for them to sign in with; this
+    # matches the admin-provisions/hands-over-credentials pattern already
+    # used everywhere else accounts get created in this app.
+    temporary_password = None
     existing_user = db.query(User).filter(User.email == invite.email).first()
-    if existing_user:
+    if not existing_user:
+        temporary_password = generate_password()
+        existing_user = User(
+            email=invite.email,
+            name=invite.email.split("@")[0],
+            password_hash=hash_password(temporary_password),
+        )
+        db.add(existing_user)
+        db.commit()
+        db.refresh(existing_user)
+
+    already_member = db.query(OrganizationMember).filter(
+        OrganizationMember.organization_id == org_id,
+        OrganizationMember.user_id == existing_user.id,
+    ).first()
+    if not already_member:
         member = OrganizationMember(
             organization_id=org_id,
             user_id=existing_user.id,
             role=invite.role
         )
         db.add(member)
-        new_invite.status = InviteStatus.accepted
         db.commit()
 
         org_name = db.query(Organization).filter(Organization.id == org_id).first().name
@@ -168,7 +176,12 @@ async def add_member(
     record(db, org_id, user_id, "invited", "member", None,
            {"email": invite.email, "role": invite.role.value if hasattr(invite.role, "value") else invite.role})
 
-    return {"message": f"Invitation sent to {invite.email}"}
+    return {
+        "message": f"{invite.email} now has access to this organisation."
+        if temporary_password is None
+        else f"Account created for {invite.email}. Give them the temporary password shown.",
+        "temporary_password": temporary_password,
+    }
 
 @router.delete("/{org_id}/members/{member_id}")
 async def remove_member(
