@@ -1,8 +1,15 @@
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
+import secrets
+import string
 import bcrypt
 from jose import JWTError, jwt
 from config import settings
+
+
+def generate_password(length: int = 16) -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
 
 # bcrypt only consumes the first 72 bytes of input and raises on anything longer,
 # so truncate explicitly rather than letting the library error out. passlib is not

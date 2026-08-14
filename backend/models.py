@@ -394,3 +394,26 @@ class SprintTask(Base):
 
     sprint = relationship("Sprint", back_populates="tasks")
     task = relationship("Task")
+
+
+class ProjectRole(str, enum.Enum):
+    viewer = "viewer"
+    editor = "editor"
+
+
+class ProjectMember(Base):
+    """Grants one user access to exactly one project, independent of
+    OrganizationMember. Does not add the user to the org roster and does
+    not appear anywhere OrganizationMember does."""
+
+    __tablename__ = "project_members"
+
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.id"))
+    user_id = Column(Integer, ForeignKey("users.id"))
+    role = Column(SQLEnum(ProjectRole), default=ProjectRole.viewer)
+    invited_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    project = relationship("Project")
+    user = relationship("User", foreign_keys=[user_id])
