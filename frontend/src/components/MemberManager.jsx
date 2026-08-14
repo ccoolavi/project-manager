@@ -9,6 +9,7 @@ import { useSensitiveAction } from '../hooks/useSensitiveAction'
 import SensitiveActionModal from './SensitiveActionModal'
 
 const INVITABLE_ROLES = ['admin', 'editor', 'member', 'viewer']
+const PROJECT_INVITABLE_ROLES = ['viewer', 'editor']
 
 export default function MemberManager() {
   const { currentOrg } = useOrg()
@@ -20,6 +21,9 @@ export default function MemberManager() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [scopes, setScopes] = useState([])
+  const [scopeKey, setScopeKey] = useState('org') // 'org' or `project:<id>`
+  const [tempPassword, setTempPassword] = useState('')
   const sensitiveAction = useSensitiveAction()
 
   const canManage = hasRole('owner', 'admin')
@@ -44,6 +48,12 @@ export default function MemberManager() {
       // Invite listing is admin-only; a normal member simply sees no pending list.
       setInvites([])
     }
+    try {
+      const res = await api.get('/api/me/controlled-scopes')
+      setScopes(res.data)
+    } catch {
+      setScopes([])
+    }
     setLoading(false)
   }
 
@@ -56,12 +66,19 @@ export default function MemberManager() {
     }
     setError('')
     setNotice('')
+    setTempPassword('')
     try {
-      const res = await api.post(`/api/orgs/${currentOrg.id}/members`, {
-        email: trimmed,
-        role
-      })
+      let res
+      if (scopeKey === 'org') {
+        res = await api.post(`/api/orgs/${currentOrg.id}/members`, { email: trimmed, role })
+      } else {
+        const projectId = scopeKey.split(':')[1]
+        res = await api.post(`/api/orgs/${currentOrg.id}/projects/${projectId}/members`, {
+          email: trimmed, role,
+        })
+      }
       setNotice(res.data?.message || `Invitation sent to ${trimmed}.`)
+      if (res.data?.temporary_password) setTempPassword(res.data.temporary_password)
       setEmail('')
       await load()
     } catch (err) {
@@ -115,6 +132,12 @@ export default function MemberManager() {
             {notice}
           </div>
         )}
+        {tempPassword && (
+          <div className="mb-4 px-3 py-2 bg-amber-500/10 border border-amber-500/40 rounded-lg text-sm text-amber-200">
+            <p className="font-medium mb-1">Temporary password — give this to them now, it won't be shown again:</p>
+            <code className="block px-2 py-1 bg-slate-900 rounded font-mono text-amber-100">{tempPassword}</code>
+          </div>
+        )}
 
         {loading && <p className="text-sm text-slate-400">Loading...</p>}
 
@@ -162,8 +185,8 @@ export default function MemberManager() {
             <h2 className="text-xl font-bold text-white">Add someone</h2>
           </div>
           <p className="text-sm text-slate-400 mb-4">
-            They will join {currentOrg?.name} straight away if they already have an
-            account; otherwise their invitation waits until they sign up.
+            They will get access straight away — an existing account is just granted access;
+            a brand-new email gets an account provisioned with a temporary password for you to hand over.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-2">
@@ -177,12 +200,30 @@ export default function MemberManager() {
               className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-brand-500"
             />
             <select
+              value={scopeKey}
+              onChange={(e) => {
+                setScopeKey(e.target.value)
+                setRole(e.target.value === 'org' ? 'member' : 'viewer')
+              }}
+              aria-label="Access scope"
+              className="px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-brand-500"
+            >
+              <option value="org">Whole organization</option>
+              {scopes.flatMap((s) =>
+                s.projects.map((p) => (
+                  <option key={`${s.org_id}:${p.id}`} value={`project:${p.id}`}>
+                    Project: {p.name} ({s.org_name})
+                  </option>
+                ))
+              )}
+            </select>
+            <select
               value={role}
               onChange={(e) => setRole(e.target.value)}
               aria-label="Role"
               className="px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white capitalize focus:outline-none focus:border-brand-500"
             >
-              {INVITABLE_ROLES.map((r) => (
+              {(scopeKey === 'org' ? INVITABLE_ROLES : PROJECT_INVITABLE_ROLES).map((r) => (
                 <option key={r} value={r}>{r}</option>
               ))}
             </select>
@@ -194,7 +235,7 @@ export default function MemberManager() {
             </button>
           </div>
 
-          <p className="mt-3 text-xs text-slate-500">{ROLE_LABELS[role]}</p>
+          {scopeKey === 'org' && <p className="mt-3 text-xs text-slate-500">{ROLE_LABELS[role]}</p>}
 
           {invites.filter((i) => i.status === 'pending').length > 0 && (
             <div className="mt-6">
