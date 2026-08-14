@@ -68,17 +68,26 @@ def resolve_sub_project(
 
 
 def require_project_access(
-    db: Session, project_id: int, user_id: int, need_edit: bool = False
+    db: Session, org_id: int, project_id: int, user_id: int, need_edit: bool = False
 ):
     """Grant access if the caller is a member of the project's organization
     (any role — existing org-role checks elsewhere still gate edit rights
     for org members), OR holds a ProjectMember row for this exact project.
 
+    Requires org_id and project_id to actually match, same as
+    resolve_project — a project addressed through the wrong org_id 404s
+    rather than 403s, so a caller outside an org can't learn a resource
+    exists there just by trying its own org_id against a guessed project_id.
+
     An org member's edit rights are unchanged by this function; it only
     adds a second, narrower path for a caller with no org membership at
     all. need_edit for that narrower path requires role == "editor".
     """
-    project = db.query(Project).filter(Project.id == project_id).first()
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.organization_id == org_id)
+        .first()
+    )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 

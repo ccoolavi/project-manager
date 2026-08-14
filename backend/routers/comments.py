@@ -6,7 +6,7 @@ from database import get_db
 from schemas import TaskCommentCreate, TaskCommentResponse
 from models import TaskComment
 from middleware.auth import get_current_user
-from utils.tenancy import require_membership, resolve_task
+from utils.tenancy import require_membership, require_project_access, resolve_task
 from utils.audit import record
 from utils.notifications import notify
 
@@ -27,7 +27,7 @@ async def list_comments(
 ):
     """List comments on a task, oldest first."""
     user_id = int(current_user.get("sub"))
-    require_membership(db, org_id, user_id)
+    require_project_access(db, org_id, project_id, user_id)
     resolve_task(db, org_id, project_id, sub_project_id, task_id)
 
     comments = (
@@ -51,7 +51,7 @@ async def create_comment(
 ):
     """Add a comment to a task."""
     user_id = int(current_user.get("sub"))
-    require_membership(db, org_id, user_id)
+    require_project_access(db, org_id, project_id, user_id)
     task = resolve_task(db, org_id, project_id, sub_project_id, task_id)
 
     content = payload.content.strip()

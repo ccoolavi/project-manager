@@ -4,13 +4,14 @@ from typing import List
 
 from database import get_db
 from schemas import TaskCreate, TaskUpdate, TaskResponse, TaskDependencyCreate, TaskDependencyResponse, BulkTaskAction
-from models import Project, SubProject, Task, TaskDependency, TaskPriority, TaskStatus
+from models import Project, SubProject, Task, TaskDependency, TaskPriority, TaskStatus, OrganizationMember
 from middleware.auth import get_current_user
 from utils.audit import record
 from utils.notifications import notify
 from utils.tenancy import (
     require_membership,
     require_role,
+    require_project_access,
     resolve_sub_project,
     resolve_task,
 )
@@ -71,7 +72,7 @@ async def list_tasks(
 ):
     """List tasks in a sub-project."""
     user_id = int(current_user.get("sub"))
-    require_membership(db, org_id, user_id)
+    require_project_access(db, org_id, project_id, user_id)
     resolve_sub_project(db, org_id, project_id, sub_project_id)
 
     tasks = db.query(Task).filter(Task.sub_project_id == sub_project_id).all()
@@ -89,7 +90,7 @@ async def get_task(
 ):
     """Get task details."""
     user_id = int(current_user.get("sub"))
-    require_membership(db, org_id, user_id)
+    require_project_access(db, org_id, project_id, user_id)
     task = resolve_task(db, org_id, project_id, sub_project_id, task_id)
 
     return TaskResponse.from_orm(task)
@@ -107,8 +108,9 @@ async def update_task(
 ):
     """Update a task."""
     user_id = int(current_user.get("sub"))
-    member = require_membership(db, org_id, user_id)
-    require_role(member, "owner", "admin", "editor", "member")
+    grantor = require_project_access(db, org_id, project_id, user_id, need_edit=True)
+    if isinstance(grantor, OrganizationMember):
+        require_role(grantor, "owner", "admin", "editor", "member")
     task = resolve_task(db, org_id, project_id, sub_project_id, task_id)
 
     if task_data.title:
