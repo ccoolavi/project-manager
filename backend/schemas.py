@@ -66,6 +66,13 @@ class OrganizationResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class MyOrgResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    role: UserRole
+    member_count: int
+
 # Project Schemas
 class ProjectCreate(BaseModel):
     name: str

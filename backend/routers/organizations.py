@@ -6,7 +6,7 @@ from typing import List
 
 from database import get_db
 from schemas import (
-    OrganizationCreate, OrganizationResponse, OrganizationMemberResponse,
+    OrganizationCreate, OrganizationUpdate, OrganizationResponse, OrganizationMemberResponse,
     InviteMember, InviteResponse
 )
 from models import (
@@ -16,7 +16,7 @@ from models import (
 from utils.audit import record
 from utils.action_otp import require_recent_action_otp
 from utils.notifications import notify
-from utils.tenancy import require_membership
+from utils.tenancy import require_membership, require_role
 from utils.security import hash_password, generate_password
 from middleware.auth import (
     get_current_user, get_current_org_id, require_org_role
@@ -182,6 +182,65 @@ async def add_member(
         else f"Account created for {invite.email}. Give them the temporary password shown.",
         "temporary_password": temporary_password,
     }
+
+@router.patch("/{org_id}", response_model=OrganizationResponse)
+async def update_organization(
+    org_id: int,
+    org_data: OrganizationUpdate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Rename/describe an org (owner/admin only)."""
+    user_id = int(current_user.get("sub"))
+    member = require_membership(db, org_id, user_id)
+    require_role(member, "owner", "admin")
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    if org_data.name is not None:
+        org.name = org_data.name
+    if org_data.description is not None:
+        org.description = org_data.description
+    db.commit()
+    db.refresh(org)
+    return OrganizationResponse.from_orm(org)
+
+
+# Registered before /members/{member_id} so the literal "me" path segment
+# matches this route rather than being coerced (and failing) as an int
+# member_id on the dynamic route below.
+@router.delete("/{org_id}/members/me")
+async def leave_organization(
+    org_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Leave an org. The sole remaining owner of an org with other members
+    still in it cannot leave — someone has to own it."""
+    user_id = int(current_user.get("sub"))
+    member = require_membership(db, org_id, user_id)
+
+    if member.role.value == "owner":
+        other_owners = db.query(OrganizationMember).filter(
+            OrganizationMember.organization_id == org_id,
+            OrganizationMember.role == UserRole.owner,
+            OrganizationMember.user_id != user_id,
+        ).count()
+        other_members = db.query(OrganizationMember).filter(
+            OrganizationMember.organization_id == org_id,
+            OrganizationMember.user_id != user_id,
+        ).count()
+        if other_owners == 0 and other_members > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Promote someone else to owner before you leave.",
+            )
+
+    db.delete(member)
+    db.commit()
+    return {"message": "You left the organisation."}
+
 
 @router.delete("/{org_id}/members/{member_id}")
 async def remove_member(

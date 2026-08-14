@@ -11,7 +11,7 @@ from sqlalchemy import text
 
 from config import settings
 from database import engine, Base
-from routers import auth, organizations, projects, tasks, habits, kaizen, time, otp, ikigai, invites, comments, search, email_otp, notifications, analytics, sprints
+from routers import auth, organizations, projects, tasks, habits, kaizen, time, otp, ikigai, invites, comments, search, email_otp, notifications, analytics, sprints, me
 
 # Create database tables. This only creates tables that don't exist yet — it
 # never alters an existing table, so a new column on an existing model (like
@@ -77,6 +77,7 @@ app.include_router(email_otp.router)
 app.include_router(notifications.router)
 app.include_router(analytics.router)
 app.include_router(sprints.router)
+app.include_router(me.router)
 
 # Root endpoint
 @app.get("/")
