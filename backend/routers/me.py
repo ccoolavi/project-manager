@@ -6,7 +6,10 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from database import get_db
-from schemas import MyOrgResponse, MyTimelineResponse, MyTimelineTask, MyTimelineSprint
+from schemas import (
+    MyOrgResponse, MyTimelineResponse, MyTimelineTask, MyTimelineSprint,
+    ControlledOrgScope, ControlledProject,
+)
 from models import (
     Organization, OrganizationMember, Task, SubProject, Project,
     Sprint, SprintTask,
@@ -98,3 +101,30 @@ async def my_timeline(
     ]
 
     return MyTimelineResponse(tasks=tasks, sprints=sprints)
+
+
+@router.get("/controlled-scopes", response_model=List[ControlledOrgScope])
+async def my_controlled_scopes(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Orgs where the caller is owner/admin, with their projects — the only
+    scopes the caller is allowed to grant access to via an invite."""
+    user_id = int(current_user.get("sub"))
+    memberships = (
+        db.query(OrganizationMember)
+        .filter(
+            OrganizationMember.user_id == user_id,
+            OrganizationMember.role.in_(["owner", "admin"]),
+        )
+        .all()
+    )
+    result = []
+    for m in memberships:
+        org = db.query(Organization).filter(Organization.id == m.organization_id).first()
+        projects = db.query(Project).filter(Project.organization_id == org.id).all()
+        result.append(ControlledOrgScope(
+            org_id=org.id, org_name=org.name,
+            projects=[ControlledProject(id=p.id, name=p.name) for p in projects],
+        ))
+    return result
