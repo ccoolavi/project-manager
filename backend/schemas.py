@@ -73,6 +73,41 @@ class MyOrgResponse(BaseModel):
     role: UserRole
     member_count: int
 
+class MyTimelineTask(BaseModel):
+    id: int
+    title: str
+    status: TaskStatus
+    priority: TaskPriority
+    due_date: Optional[datetime] = None
+    start_date: Optional[datetime] = None
+    story_points: Optional[int] = None
+    organization_id: int
+    organization_name: str
+    project_id: int
+    project_name: str
+    sub_project_id: int
+
+class MyTimelineSprint(BaseModel):
+    id: int
+    name: str
+    start_date: datetime
+    end_date: datetime
+    organization_id: int
+    organization_name: str
+
+class MyTimelineResponse(BaseModel):
+    tasks: List[MyTimelineTask]
+    sprints: List[MyTimelineSprint]
+
+class ControlledProject(BaseModel):
+    id: int
+    name: str
+
+class ControlledOrgScope(BaseModel):
+    org_id: int
+    org_name: str
+    projects: List[ControlledProject]
+
 # Project Schemas
 class ProjectCreate(BaseModel):
     name: str
