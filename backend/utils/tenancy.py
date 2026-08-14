@@ -12,7 +12,7 @@ passing their own ``org_id`` together with a foreign ``sub_project_id``.
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from models import OrganizationMember, Project, SubProject, Task
+from models import OrganizationMember, Project, SubProject, Task, ProjectMember
 
 
 def require_membership(db: Session, org_id: int, user_id: int) -> OrganizationMember:
@@ -65,6 +65,47 @@ def resolve_sub_project(
     if not sub_project:
         raise HTTPException(status_code=404, detail="Sub-project not found")
     return sub_project
+
+
+def require_project_access(
+    db: Session, project_id: int, user_id: int, need_edit: bool = False
+):
+    """Grant access if the caller is a member of the project's organization
+    (any role — existing org-role checks elsewhere still gate edit rights
+    for org members), OR holds a ProjectMember row for this exact project.
+
+    An org member's edit rights are unchanged by this function; it only
+    adds a second, narrower path for a caller with no org membership at
+    all. need_edit for that narrower path requires role == "editor".
+    """
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    org_member = (
+        db.query(OrganizationMember)
+        .filter(
+            OrganizationMember.organization_id == project.organization_id,
+            OrganizationMember.user_id == user_id,
+        )
+        .first()
+    )
+    if org_member:
+        return org_member
+
+    project_member = (
+        db.query(ProjectMember)
+        .filter(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_id,
+        )
+        .first()
+    )
+    if not project_member:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if need_edit and project_member.role.value != "editor":
+        raise HTTPException(status_code=403, detail="Permission denied")
+    return project_member
 
 
 def resolve_task(
