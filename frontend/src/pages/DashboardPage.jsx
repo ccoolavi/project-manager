@@ -19,10 +19,14 @@ import SprintBoard from '../components/SprintBoard'
 import CalendarView from '../components/CalendarView'
 import PendingInvites from '../components/PendingInvites'
 import ActivityLog from '../components/ActivityLog'
+import MyOrganizationsPage from './MyOrganizationsPage'
+import MyTimelinePage from './MyTimelinePage'
 import api from '../utils/api'
 
 // Tab ids are lowercase slugs; these are the words the user should actually see.
 const TAB_TITLES = {
+  'my-orgs': 'My Organizations',
+  'my-timeline': 'My Timeline',
   tasks: 'Tasks',
   projects: 'Projects',
   timeline: 'Timeline',
@@ -139,6 +143,16 @@ export default function DashboardPage() {
             </div>
 
             <PendingInvites />
+
+            {/* My Organizations Tab */}
+            {activeTab === 'my-orgs' && (
+              <MyOrganizationsPage onSwitched={() => setActiveTab('tasks')} />
+            )}
+
+            {/* My Timeline Tab */}
+            {activeTab === 'my-timeline' && (
+              <MyTimelinePage />
+            )}
 
             {/* Tasks Tab */}
             {activeTab === 'tasks' && (
