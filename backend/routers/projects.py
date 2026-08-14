@@ -3,12 +3,16 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from database import get_db
-from schemas import ProjectCreate, ProjectUpdate, ProjectResponse, SubProjectCreate, SubProjectResponse
-from models import Project, SubProject, Organization, OrganizationMember
+from schemas import (
+    ProjectCreate, ProjectUpdate, ProjectResponse, SubProjectCreate, SubProjectResponse,
+    ProjectMemberInvite, ProjectMemberInviteResult,
+)
+from models import Project, SubProject, Organization, OrganizationMember, User, ProjectMember
 from middleware.auth import get_current_user, get_current_org_id
 from utils.tenancy import resolve_project
 from utils.audit import record
 from utils.action_otp import require_recent_action_otp
+from utils.security import hash_password, generate_password
 
 router = APIRouter(prefix="/api/orgs/{org_id}/projects", tags=["projects"])
 
@@ -234,3 +238,58 @@ async def list_sub_projects(
 
     subs = db.query(SubProject).filter(SubProject.project_id == project_id).all()
     return [SubProjectResponse.from_orm(s) for s in subs]
+
+
+@router.post("/{project_id}/members", response_model=ProjectMemberInviteResult)
+async def invite_project_member(
+    org_id: int,
+    project_id: int,
+    invite: ProjectMemberInvite,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Grant an existing-or-new user viewer/editor access to exactly this
+    project, without adding them to the org's member roster. Only an
+    owner/admin of the project's own org may do this."""
+    user_id = int(current_user.get("sub"))
+    member = db.query(OrganizationMember).filter(
+        OrganizationMember.organization_id == org_id,
+        OrganizationMember.user_id == user_id,
+    ).first()
+    if not member or member.role.value not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only owners and admins can grant project access")
+
+    project = resolve_project(db, org_id, project_id)
+
+    target = db.query(User).filter(User.email == invite.email).first()
+    temporary_password = None
+    if not target:
+        temporary_password = generate_password()
+        target = User(
+            email=invite.email,
+            name=invite.email.split("@")[0],
+            password_hash=hash_password(temporary_password),
+        )
+        db.add(target)
+        db.commit()
+        db.refresh(target)
+
+    existing_grant = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project.id,
+        ProjectMember.user_id == target.id,
+    ).first()
+    if existing_grant:
+        existing_grant.role = invite.role
+    else:
+        db.add(ProjectMember(
+            project_id=project.id,
+            user_id=target.id,
+            role=invite.role,
+            invited_by=user_id,
+        ))
+    db.commit()
+
+    return ProjectMemberInviteResult(
+        message=f"{invite.email} now has {invite.role.value} access to {project.name}.",
+        temporary_password=temporary_password,
+    )

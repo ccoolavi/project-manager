@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
 from typing import Optional, List
-from models import UserRole, TaskStatus, TaskPriority, ProjectStatus, InviteStatus
+from models import UserRole, TaskStatus, TaskPriority, ProjectStatus, InviteStatus, ProjectRole
 
 # User Schemas
 class UserLogin(BaseModel):
@@ -216,6 +216,14 @@ class TimeEntryResponse(BaseModel):
 class InviteMember(BaseModel):
     email: EmailStr
     role: UserRole = UserRole.member
+
+class ProjectMemberInvite(BaseModel):
+    email: EmailStr
+    role: ProjectRole = ProjectRole.viewer
+
+class ProjectMemberInviteResult(BaseModel):
+    message: str
+    temporary_password: Optional[str] = None
 
 class InviteResponse(BaseModel):
     id: int
