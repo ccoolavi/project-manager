@@ -27,7 +27,6 @@ export default function AnalyticsPage() {
   const { currentOrg } = useOrg()
   const { formatDate } = useLocalization()
   const [tasks, setTasks] = useState(null)
-  const [habits, setHabits] = useState(null)
   const [time, setTime] = useState([])
   const [velocity, setVelocity] = useState([])
   const [loading, setLoading] = useState(true)
@@ -41,14 +40,12 @@ export default function AnalyticsPage() {
     setLoading(true)
     setError('')
     try {
-      const [t, h, tm, v] = await Promise.all([
+      const [t, tm, v] = await Promise.all([
         api.get(`/api/orgs/${currentOrg.id}/analytics/tasks`),
-        api.get(`/api/orgs/${currentOrg.id}/analytics/habits`),
         api.get(`/api/orgs/${currentOrg.id}/analytics/time`),
         api.get(`/api/orgs/${currentOrg.id}/analytics/velocity`)
       ])
       setTasks(t.data)
-      setHabits(h.data)
       setTime(tm.data)
       setVelocity(v.data.map((w) => ({ ...w, label: formatDate(w.week_start) })))
     } catch {
@@ -151,31 +148,6 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {habits?.leaderboard.length > 0 && (
-        <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
-          <h3 className="text-sm font-semibold text-white px-5 pt-4 pb-2">Habit streak leaderboard</h3>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-700 text-slate-400 text-left">
-                <th className="px-5 py-2 font-medium">Habit</th>
-                <th className="px-5 py-2 font-medium">Person</th>
-                <th className="px-5 py-2 font-medium text-right">Streak</th>
-                <th className="px-5 py-2 font-medium text-right">Last 30 days</th>
-              </tr>
-            </thead>
-            <tbody>
-              {habits.leaderboard.map((h) => (
-                <tr key={h.habit_id} className="border-b border-slate-800 last:border-0 text-slate-200">
-                  <td className="px-5 py-2">{h.title}</td>
-                  <td className="px-5 py-2 text-slate-400">{h.user_name}</td>
-                  <td className="px-5 py-2 text-right font-semibold">{h.streak}</td>
-                  <td className="px-5 py-2 text-right">{h.completions_last_30d}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   )
 }

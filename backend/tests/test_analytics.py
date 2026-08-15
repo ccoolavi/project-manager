@@ -1,4 +1,4 @@
-"""Analytics: task completion, habit leaderboard, time totals, velocity."""
+"""Analytics: task completion, time totals, velocity."""
 
 from conftest import auth, make_org_with_project
 
@@ -31,21 +31,6 @@ def test_task_analytics_empty_org(client):
     assert body["overall"]["total"] == 0
     assert body["overall"]["completion_rate"] == 0
     assert body["projects"] == []
-
-
-def test_habit_analytics_leaderboard(client):
-    ctx = make_org_with_project(client, "an3@test.com")
-    habit = client.post(
-        f"/api/orgs/{ctx['org_id']}/habits", json={"title": "Exercise", "target_days": 7}, headers=auth(ctx["token"])
-    ).json()
-    client.post(f"/api/orgs/{ctx['org_id']}/habits/{habit['id']}/check", headers=auth(ctx["token"]))
-
-    res = client.get(f"/api/orgs/{ctx['org_id']}/analytics/habits", headers=auth(ctx["token"]))
-    body = res.json()
-    assert len(body["leaderboard"]) == 1
-    assert body["leaderboard"][0]["streak"] == 1
-    assert body["leaderboard"][0]["completions_last_30d"] == 1
-    assert body["completion_rate_30d"] == round(1 / 30, 3)
 
 
 def test_time_analytics_sums_by_category(client):
@@ -84,6 +69,6 @@ def test_velocity_returns_eight_weeks_with_current_week_populated(client):
 def test_analytics_requires_membership(client):
     alice = make_org_with_project(client, "an6a@test.com")
     bob = make_org_with_project(client, "an6b@test.com")
-    for endpoint in ("tasks", "habits", "time", "velocity"):
+    for endpoint in ("tasks", "time", "velocity"):
         res = client.get(f"/api/orgs/{alice['org_id']}/analytics/{endpoint}", headers=auth(bob["token"]))
         assert res.status_code == 403, endpoint

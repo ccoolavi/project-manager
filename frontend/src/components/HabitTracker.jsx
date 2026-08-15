@@ -1,23 +1,20 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Check } from 'lucide-react'
 import api from '../utils/api'
-import { useOrg } from '../context/OrgContext'
 
 export default function HabitTracker() {
-  const { currentOrg } = useOrg()
   const [habits, setHabits] = useState([])
   const [newHabit, setNewHabit] = useState('')
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     fetchHabits()
-  }, [currentOrg?.id])
+  }, [])
 
   const fetchHabits = async () => {
-    if (!currentOrg) return
     setLoading(true)
     try {
-      const res = await api.get(`/api/orgs/${currentOrg.id}/habits`)
+      const res = await api.get('/api/habits')
       setHabits(res.data)
     } catch (err) {
       console.error('Failed to fetch habits:', err)
@@ -28,7 +25,7 @@ export default function HabitTracker() {
   const createHabit = async () => {
     if (!newHabit.trim()) return
     try {
-      const res = await api.post(`/api/orgs/${currentOrg.id}/habits`, {
+      const res = await api.post('/api/habits', {
         title: newHabit,
         target_days: 7
       })
@@ -41,7 +38,7 @@ export default function HabitTracker() {
 
   const checkHabit = async (habitId) => {
     try {
-      const res = await api.post(`/api/orgs/${currentOrg.id}/habits/${habitId}/check`)
+      const res = await api.post(`/api/habits/${habitId}/check`)
       setHabits(habits.map(h => h.id === habitId ? res.data : h))
     } catch (err) {
       console.error('Failed to check habit:', err)
@@ -50,7 +47,7 @@ export default function HabitTracker() {
 
   const deleteHabit = async (habitId) => {
     try {
-      await api.delete(`/api/orgs/${currentOrg.id}/habits/${habitId}`)
+      await api.delete(`/api/habits/${habitId}`)
       setHabits(habits.filter(h => h.id !== habitId))
     } catch (err) {
       console.error('Failed to delete habit:', err)
@@ -59,6 +56,9 @@ export default function HabitTracker() {
 
   return (
     <div className="space-y-4">
+      <p className="text-xs text-slate-500">
+        Private to you &mdash; not tied to any organisation, and no one else can see or share these.
+      </p>
       <div className="flex gap-2">
         <input
           type="text"

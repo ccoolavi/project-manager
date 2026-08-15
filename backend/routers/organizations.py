@@ -7,11 +7,11 @@ from typing import List
 from database import get_db
 from schemas import (
     OrganizationCreate, OrganizationUpdate, OrganizationResponse, OrganizationMemberResponse,
-    InviteMember, InviteResponse
+    InviteMember, InviteResponse, MemberRoleUpdate, ProjectAccessGrant
 )
 from models import (
     Organization, User, OrganizationMember, OrganizationInvite,
-    Project, SubProject, Task, UserRole, InviteStatus
+    Project, SubProject, Task, UserRole, InviteStatus, ProjectMember
 )
 from utils.audit import record
 from utils.action_otp import require_recent_action_otp
@@ -240,6 +240,106 @@ async def leave_organization(
     db.delete(member)
     db.commit()
     return {"message": "You left the organisation."}
+
+
+@router.patch("/{org_id}/members/{member_id}", response_model=OrganizationMemberResponse)
+async def update_member_role(
+    org_id: int,
+    member_id: int,
+    body: MemberRoleUpdate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Change an existing member's role (owner/admin only).
+
+    Only an owner can grant or change the owner role — an admin changing
+    roles is capped at admin/editor/member/viewer — and the last owner
+    can't be demoted while other members remain, mirroring the same rule
+    leave_organization already enforces for someone leaving outright.
+    """
+    user_id = int(current_user.get("sub"))
+    caller = require_membership(db, org_id, user_id)
+    require_role(caller, "owner", "admin")
+
+    if body.role == UserRole.owner and caller.role.value != "owner":
+        raise HTTPException(status_code=403, detail="Only an owner can grant the owner role")
+
+    member = db.query(OrganizationMember).filter(
+        OrganizationMember.id == member_id,
+        OrganizationMember.organization_id == org_id,
+    ).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    if member.role.value == "owner" and body.role != UserRole.owner:
+        other_owners = db.query(OrganizationMember).filter(
+            OrganizationMember.organization_id == org_id,
+            OrganizationMember.role == UserRole.owner,
+            OrganizationMember.id != member_id,
+        ).count()
+        if other_owners == 0:
+            raise HTTPException(status_code=400, detail="Promote someone else to owner first")
+
+    member.role = body.role
+    db.commit()
+    db.refresh(member)
+
+    record(db, org_id, user_id, "updated", "member_role", member.user_id, {"role": body.role.value})
+
+    return OrganizationMemberResponse.from_orm(member)
+
+
+@router.get("/{org_id}/project-access", response_model=List[ProjectAccessGrant])
+async def list_project_access(
+    org_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Every project-scoped (non-org-wide) grant in this org, for the
+    access-management view (owner/admin only)."""
+    user_id = int(current_user.get("sub"))
+    caller = require_membership(db, org_id, user_id)
+    require_role(caller, "owner", "admin")
+
+    grants = (
+        db.query(ProjectMember)
+        .join(Project, ProjectMember.project_id == Project.id)
+        .filter(Project.organization_id == org_id)
+        .all()
+    )
+    return [
+        ProjectAccessGrant(
+            id=g.id, project_id=g.project_id, project_name=g.project.name,
+            user_id=g.user_id, role=g.role, user=g.user,
+        )
+        for g in grants
+    ]
+
+
+@router.delete("/{org_id}/project-access/{grant_id}")
+async def revoke_project_access(
+    org_id: int,
+    grant_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Revoke a single project-scoped grant (owner/admin only)."""
+    user_id = int(current_user.get("sub"))
+    caller = require_membership(db, org_id, user_id)
+    require_role(caller, "owner", "admin")
+
+    grant = (
+        db.query(ProjectMember)
+        .join(Project, ProjectMember.project_id == Project.id)
+        .filter(ProjectMember.id == grant_id, Project.organization_id == org_id)
+        .first()
+    )
+    if not grant:
+        raise HTTPException(status_code=404, detail="Grant not found")
+
+    db.delete(grant)
+    db.commit()
+    return {"message": "Access revoked"}
 
 
 @router.delete("/{org_id}/members/{member_id}")

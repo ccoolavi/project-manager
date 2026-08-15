@@ -47,11 +47,11 @@ N=$(curl -s -m 20 "$API/api/orgs/$OAID/projects/$PID/tasks/$SPID" -H "$AH" | pyt
 chk 1 "$N" "task list returns 1"
 
 echo "== 7. Habit + check-in persistence =="
-HB=$(curl -s -m 20 -X POST "$API/api/orgs/$OAID/habits" -H "$J" -H "$AH" -d '{"title":"Exercise","category":"health","target_days":7}')
+HB=$(curl -s -m 20 -X POST "$API/api/habits" -H "$J" -H "$AH" -d '{"title":"Exercise","category":"health","target_days":7}')
 HID=$(echo "$HB" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")
 [ -n "$HID" ] && chk 1 1 "habit created" || chk 1 0 "habit created"
-curl -s -m 20 -o /dev/null -X POST "$API/api/orgs/$OAID/habits/$HID/check" -H "$AH"
-STREAK=$(curl -s -m 20 "$API/api/orgs/$OAID/habits" -H "$AH" | python3 -c "import sys,json;print(json.load(sys.stdin)[0]['streak'])")
+curl -s -m 20 -o /dev/null -X POST "$API/api/habits/$HID/check" -H "$AH"
+STREAK=$(curl -s -m 20 "$API/api/habits" -H "$AH" | python3 -c "import sys,json;print(json.load(sys.stdin)[0]['streak'])")
 chk 1 "$STREAK" "habit streak PERSISTED after re-read (MutableList fix)"
 
 echo "== 8. Time entry (previously 404) =="

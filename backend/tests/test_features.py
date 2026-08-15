@@ -9,42 +9,51 @@ from conftest import auth, make_org_with_project
 
 def test_habit_check_in_persists(client):
     """A JSON column mutated in place is not saved unless it is a MutableList."""
-    ctx = make_org_with_project(client, "habit@test.com")
+    from conftest import register, login
+    register(client, "habit@test.com")
+    token = login(client, "habit@test.com")
     habit = client.post(
-        f"/api/orgs/{ctx['org_id']}/habits",
+        "/api/habits",
         json={"title": "Exercise", "category": "health", "target_days": 7},
-        headers=auth(ctx["token"]),
+        headers=auth(token),
     ).json()
 
-    client.post(
-        f"/api/orgs/{ctx['org_id']}/habits/{habit['id']}/check", headers=auth(ctx["token"])
-    )
+    client.post(f"/api/habits/{habit['id']}/check", headers=auth(token))
 
-    reread = client.get(
-        f"/api/orgs/{ctx['org_id']}/habits", headers=auth(ctx["token"])
-    ).json()[0]
+    reread = client.get("/api/habits", headers=auth(token)).json()[0]
     assert reread["streak"] == 1
     assert len(reread["completed_dates"]) == 1
 
 
 def test_habit_check_in_is_idempotent_within_a_day(client):
-    ctx = make_org_with_project(client, "habit2@test.com")
+    from conftest import register, login
+    register(client, "habit2@test.com")
+    token = login(client, "habit2@test.com")
     habit = client.post(
-        f"/api/orgs/{ctx['org_id']}/habits",
+        "/api/habits",
         json={"title": "Read", "target_days": 7},
-        headers=auth(ctx["token"]),
+        headers=auth(token),
     ).json()
 
     for _ in range(3):
-        client.post(
-            f"/api/orgs/{ctx['org_id']}/habits/{habit['id']}/check",
-            headers=auth(ctx["token"]),
-        )
+        client.post(f"/api/habits/{habit['id']}/check", headers=auth(token))
 
-    reread = client.get(
-        f"/api/orgs/{ctx['org_id']}/habits", headers=auth(ctx["token"])
-    ).json()[0]
+    reread = client.get("/api/habits", headers=auth(token)).json()[0]
     assert reread["streak"] == 1, "checking in twice in one day must not inflate the streak"
+
+
+def test_habits_are_private_to_the_user_who_created_them(client):
+    """Habits are never org- or otherwise shared, per the personal-only redesign."""
+    from conftest import register, login
+    register(client, "habitowner@test.com")
+    owner_token = login(client, "habitowner@test.com")
+    client.post(
+        "/api/habits", json={"title": "Meditate", "target_days": 7}, headers=auth(owner_token)
+    )
+
+    register(client, "habitother@test.com")
+    other_token = login(client, "habitother@test.com")
+    assert client.get("/api/habits", headers=auth(other_token)).json() == []
 
 
 def test_time_entry_round_trip(client):

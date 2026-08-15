@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { UserPlus, Trash2, Shield } from 'lucide-react'
+import { UserPlus, Trash2, Shield, FolderLock } from 'lucide-react'
 import api from '../utils/api'
 import { useOrg } from '../context/OrgContext'
 import { useAuth } from '../context/AuthContext'
@@ -24,6 +24,7 @@ export default function MemberManager() {
   const [scopes, setScopes] = useState([])
   const [scopeKey, setScopeKey] = useState('org') // 'org' or `project:<id>`
   const [tempPassword, setTempPassword] = useState('')
+  const [projectAccess, setProjectAccess] = useState([])
   const sensitiveAction = useSensitiveAction()
 
   const canManage = hasRole('owner', 'admin')
@@ -54,7 +55,35 @@ export default function MemberManager() {
     } catch {
       setScopes([])
     }
+    try {
+      const res = await api.get(`/api/orgs/${currentOrg.id}/project-access`)
+      setProjectAccess(res.data)
+    } catch {
+      setProjectAccess([])
+    }
     setLoading(false)
+  }
+
+  const changeRole = async (memberId, newRole) => {
+    setError('')
+    setNotice('')
+    try {
+      await api.patch(`/api/orgs/${currentOrg.id}/members/${memberId}`, { role: newRole })
+      await load()
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Could not change that role.')
+    }
+  }
+
+  const revokeProjectAccess = async (grantId) => {
+    setError('')
+    setNotice('')
+    try {
+      await api.delete(`/api/orgs/${currentOrg.id}/project-access/${grantId}`)
+      setProjectAccess((cur) => cur.filter((g) => g.id !== grantId))
+    } catch {
+      setError('Could not revoke that access.')
+    }
   }
 
   const invite = async () => {
@@ -157,9 +186,20 @@ export default function MemberManager() {
                 <p className="text-xs text-slate-400">{m.user?.email}</p>
               </div>
               <div className="flex items-center gap-3">
-                <span className="px-2 py-1 text-xs rounded bg-brand-500/20 text-brand-300 capitalize">
-                  {m.role}
-                </span>
+                {canManage && m.role !== 'owner' && m.user?.email !== user?.email ? (
+                  <select
+                    value={m.role}
+                    onChange={(e) => changeRole(m.id, e.target.value)}
+                    aria-label={`Change role for ${m.user?.email}`}
+                    className="px-2 py-1 text-xs rounded bg-brand-500/20 text-brand-300 capitalize border border-brand-500/40 focus:outline-none"
+                  >
+                    {INVITABLE_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                ) : (
+                  <span className="px-2 py-1 text-xs rounded bg-brand-500/20 text-brand-300 capitalize">
+                    {m.role}
+                  </span>
+                )}
                 {canManage && m.role !== 'owner' && m.user?.email !== user?.email && (
                   <button
                     onClick={() => remove(m.id, m.user?.name || m.user?.email)}
@@ -255,6 +295,43 @@ export default function MemberManager() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {canManage && projectAccess.length > 0 && (
+        <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
+          <div className="flex items-center gap-2 mb-1">
+            <FolderLock size={18} className="text-brand-400" />
+            <h2 className="text-xl font-bold text-white">Project-scoped access</h2>
+          </div>
+          <p className="text-sm text-slate-400 mb-4">
+            People who can see one project here but are not members of {currentOrg?.name} itself.
+          </p>
+          <div className="space-y-2">
+            {projectAccess.map((g) => (
+              <div
+                key={g.id}
+                className="flex items-center justify-between p-3 bg-slate-900 border border-slate-700 rounded-lg"
+              >
+                <div>
+                  <p className="text-white font-medium">{g.user?.name || g.user?.email}</p>
+                  <p className="text-xs text-slate-400">{g.user?.email} &middot; {g.project_name}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="px-2 py-1 text-xs rounded bg-brand-500/20 text-brand-300 capitalize">
+                    {g.role}
+                  </span>
+                  <button
+                    onClick={() => revokeProjectAccess(g.id)}
+                    aria-label={`Revoke ${g.user?.email}'s access to ${g.project_name}`}
+                    className="p-1 hover:bg-red-500/20 rounded text-red-400"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

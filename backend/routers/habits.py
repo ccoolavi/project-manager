@@ -1,17 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 
 from database import get_db
 from schemas import HabitCreate, HabitUpdate, HabitResponse
-from models import Habit, OrganizationMember
+from models import Habit
 from middleware.auth import get_current_user
 
-router = APIRouter(prefix="/api/orgs/{org_id}/habits", tags=["habits"])
+# Habits are strictly personal: never scoped to an organization, never
+# visible or shareable with anyone else. Every route here filters by the
+# caller's own user_id and nothing else — there is no org_id in the path.
+router = APIRouter(prefix="/api/habits", tags=["habits"])
+
 
 @router.post("", response_model=HabitResponse)
 async def create_habit(
-    org_id: int,
     habit_data: HabitCreate,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -19,17 +24,7 @@ async def create_habit(
     """Create a habit"""
     user_id = int(current_user.get("sub"))
 
-    # Check org membership
-    member = db.query(OrganizationMember).filter(
-        OrganizationMember.organization_id == org_id,
-        OrganizationMember.user_id == user_id
-    ).first()
-
-    if not member:
-        raise HTTPException(status_code=403, detail="Access denied")
-
     new_habit = Habit(
-        organization_id=org_id,
         user_id=user_id,
         title=habit_data.title,
         category=habit_data.category,
@@ -41,34 +36,22 @@ async def create_habit(
 
     return HabitResponse.from_orm(new_habit)
 
+
 @router.get("", response_model=List[HabitResponse])
 async def list_habits(
-    org_id: int,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """List user's habits in organization"""
+    """List the caller's own habits"""
     user_id = int(current_user.get("sub"))
 
-    # Check org membership
-    member = db.query(OrganizationMember).filter(
-        OrganizationMember.organization_id == org_id,
-        OrganizationMember.user_id == user_id
-    ).first()
-
-    if not member:
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    habits = db.query(Habit).filter(
-        Habit.organization_id == org_id,
-        Habit.user_id == user_id
-    ).all()
+    habits = db.query(Habit).filter(Habit.user_id == user_id).all()
 
     return [HabitResponse.from_orm(h) for h in habits]
 
+
 @router.get("/{habit_id}", response_model=HabitResponse)
 async def get_habit(
-    org_id: int,
     habit_id: int,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -78,7 +61,6 @@ async def get_habit(
 
     habit = db.query(Habit).filter(
         Habit.id == habit_id,
-        Habit.organization_id == org_id,
         Habit.user_id == user_id
     ).first()
 
@@ -87,9 +69,9 @@ async def get_habit(
 
     return HabitResponse.from_orm(habit)
 
+
 @router.put("/{habit_id}", response_model=HabitResponse)
 async def update_habit(
-    org_id: int,
     habit_id: int,
     habit_data: HabitUpdate,
     current_user: dict = Depends(get_current_user),
@@ -100,7 +82,6 @@ async def update_habit(
 
     habit = db.query(Habit).filter(
         Habit.id == habit_id,
-        Habit.organization_id == org_id,
         Habit.user_id == user_id
     ).first()
 
@@ -119,9 +100,9 @@ async def update_habit(
 
     return HabitResponse.from_orm(habit)
 
+
 @router.delete("/{habit_id}")
 async def delete_habit(
-    org_id: int,
     habit_id: int,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -131,7 +112,6 @@ async def delete_habit(
 
     habit = db.query(Habit).filter(
         Habit.id == habit_id,
-        Habit.organization_id == org_id,
         Habit.user_id == user_id
     ).first()
 
@@ -143,20 +123,18 @@ async def delete_habit(
 
     return {"message": "Habit deleted"}
 
+
 @router.post("/{habit_id}/check")
 async def check_habit(
-    org_id: int,
     habit_id: int,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Mark habit as completed today"""
     user_id = int(current_user.get("sub"))
-    from datetime import datetime
 
     habit = db.query(Habit).filter(
         Habit.id == habit_id,
-        Habit.organization_id == org_id,
         Habit.user_id == user_id
     ).first()
 

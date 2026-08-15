@@ -4,7 +4,7 @@ from typing import List
 
 from database import get_db
 from middleware.auth import get_current_user
-from models import Habit, KaizenLog, Project, SubProject, Task
+from models import KaizenLog, Project, SubProject, Task
 from utils.tenancy import require_membership
 
 router = APIRouter(prefix="/api/orgs/{org_id}/search", tags=["search"])
@@ -20,12 +20,12 @@ async def search(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Search across projects, tasks, habits and kaizen logs in one organisation.
+    """Search across projects, tasks and kaizen logs in one organisation.
 
     Tasks have no direct organization_id, so they are matched by joining
-    task -> sub_project -> project -> organization. Personal entities (habits,
-    kaizen) are further restricted to the caller, matching their privacy
-    everywhere else in the app.
+    task -> sub_project -> project -> organization. Kaizen logs are a
+    personal entity further restricted to the caller. Habits are never
+    org-scoped at all (they're strictly personal) so they don't appear here.
     """
     user_id = int(current_user.get("sub"))
     require_membership(db, org_id, user_id)
@@ -75,19 +75,6 @@ async def search(
                 "sub_project_id": task.sub_project_id,
             }
         )
-
-    habits = (
-        db.query(Habit)
-        .filter(
-            Habit.organization_id == org_id,
-            Habit.user_id == user_id,
-            Habit.title.ilike(like),
-        )
-        .limit(RESULT_LIMIT)
-        .all()
-    )
-    for h in habits:
-        results.append({"type": "habit", "id": h.id, "title": h.title, "subtitle": "Habit"})
 
     logs = (
         db.query(KaizenLog)

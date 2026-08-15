@@ -24,15 +24,8 @@ curl -s -X PUT "$API/api/orgs/$OA/projects/$PID/tasks/$SID/$TID" -H "$J" -H "Aut
 RATE=$(curl -s "$API/api/orgs/$OA/analytics/tasks" -H "Authorization: Bearer $T" | python3 -c "import sys,json;print(json.load(sys.stdin)['overall']['completion_rate'])")
 chk "0.25" "$RATE" "overall completion_rate is 0.25 (1 of 4 done)"
 
-echo "== analytics/habits: create habit, check in, verify leaderboard + 30d rate =="
-HID=$(curl -s -X POST "$API/api/orgs/$OA/habits" -H "$J" -H "Authorization: Bearer $T" -d '{"title":"Exercise","target_days":7}' | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])")
-curl -s -X POST "$API/api/orgs/$OA/habits/$HID/check" -H "Authorization: Bearer $T" > /dev/null
-HDATA=$(curl -s "$API/api/orgs/$OA/analytics/habits" -H "Authorization: Bearer $T")
-echo "$HDATA" | python3 -m json.tool
-STREAK=$(echo "$HDATA" | python3 -c "import sys,json;print(json.load(sys.stdin)['leaderboard'][0]['streak'])")
-chk 1 "$STREAK" "leaderboard shows streak=1 after one check-in"
-COMP30=$(echo "$HDATA" | python3 -c "import sys,json;print(json.load(sys.stdin)['completion_rate_30d'])")
-chk "0.033" "$COMP30" "completion_rate_30d = 1/30 rounded"
+# Habits are personal-only now (not org-scoped, no org-wide leaderboard) —
+# see backend/tests/test_features.py for their coverage.
 
 echo "== analytics/time: log 90 min development -> 1.5 hours =="
 curl -s -X POST "$API/api/orgs/$OA/time" -H "$J" -H "Authorization: Bearer $T" -d '{"duration_minutes":90,"category":"development"}' > /dev/null

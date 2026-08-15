@@ -267,6 +267,20 @@ class ProjectMemberInviteResult(BaseModel):
     message: str
     temporary_password: Optional[str] = None
 
+class MemberRoleUpdate(BaseModel):
+    role: UserRole
+
+class ProjectAccessGrant(BaseModel):
+    id: int
+    project_id: int
+    project_name: str
+    user_id: int
+    role: ProjectRole
+    user: UserResponse
+
+    class Config:
+        from_attributes = True
+
 class InviteResponse(BaseModel):
     id: int
     email: str

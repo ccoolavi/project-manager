@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, ChevronRight, MessageSquare, Lock, X } from 'lucide-react'
+import { Plus, Trash2, ChevronRight, ChevronLeft, MessageSquare, Lock, X, ArrowUpDown } from 'lucide-react'
 import api from '../utils/api'
 import { useOrg } from '../context/OrgContext'
 import TaskDetailPanel from './TaskDetailPanel'
@@ -16,6 +16,10 @@ export default function KanbanBoard({ projectId, subProjectId }) {
   const [members, setMembers] = useState([])
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
+  const [search, setSearch] = useState('')
+  const [filterPriority, setFilterPriority] = useState('')
+  const [filterAssignee, setFilterAssignee] = useState('')
+  const [sortBy, setSortBy] = useState('')
 
   useEffect(() => {
     fetchTasks()
@@ -106,11 +110,29 @@ export default function KanbanBoard({ projectId, subProjectId }) {
     setBulkBusy(false)
   }
 
+  const PRIORITY_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 }
+
+  const visibleTasks = tasks
+    .filter((t) => !search.trim() || t.title.toLowerCase().includes(search.trim().toLowerCase()))
+    .filter((t) => !filterPriority || t.priority === filterPriority)
+    .filter((t) => !filterAssignee || String(t.assignee_id) === filterAssignee)
+    .sort((a, b) => {
+      if (sortBy === 'priority') return PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]
+      if (sortBy === 'due_date') {
+        if (!a.due_date && !b.due_date) return 0
+        if (!a.due_date) return 1
+        if (!b.due_date) return -1
+        return new Date(a.due_date) - new Date(b.due_date)
+      }
+      if (sortBy === 'title') return a.title.localeCompare(b.title)
+      return 0
+    })
+
   const columns = {
-    todo: tasks.filter(t => t.status === 'todo'),
-    in_progress: tasks.filter(t => t.status === 'in_progress'),
-    review: tasks.filter(t => t.status === 'review'),
-    done: tasks.filter(t => t.status === 'done')
+    todo: visibleTasks.filter(t => t.status === 'todo'),
+    in_progress: visibleTasks.filter(t => t.status === 'in_progress'),
+    review: visibleTasks.filter(t => t.status === 'review'),
+    done: visibleTasks.filter(t => t.status === 'done')
   }
 
   const openTask = tasks.find(t => t.id === openTaskId) || null
@@ -175,6 +197,20 @@ export default function KanbanBoard({ projectId, subProjectId }) {
       <div className="space-y-2">
         {tasks.map(task => (
           <div key={task.id} className="flex gap-1">
+            {status !== 'todo' && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const statuses = ['todo', 'in_progress', 'review', 'done']
+                  const prevIdx = statuses.indexOf(status) - 1
+                  updateTaskStatus(task.id, statuses[prevIdx])
+                }}
+                aria-label="Move status back"
+                className="p-1 hover:bg-brand-500/20 rounded text-slate-400 hover:text-brand-400 self-start"
+              >
+                <ChevronLeft size={14} />
+              </button>
+            )}
             <TaskCard task={task} />
             {status !== 'done' && (
               <button
@@ -185,7 +221,7 @@ export default function KanbanBoard({ projectId, subProjectId }) {
                   updateTaskStatus(task.id, statuses[nextIdx])
                 }}
                 aria-label="Advance status"
-                className="p-1 hover:bg-brand-500/20 rounded text-slate-400 hover:text-brand-400"
+                className="p-1 hover:bg-brand-500/20 rounded text-slate-400 hover:text-brand-400 self-start"
               >
                 <ChevronRight size={14} />
               </button>
@@ -221,6 +257,51 @@ export default function KanbanBoard({ projectId, subProjectId }) {
         >
           <Plus size={18} /> Add
         </button>
+      </div>
+
+      <div className="flex flex-wrap gap-2 items-center">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search tasks..."
+          aria-label="Search tasks"
+          className="px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded text-white text-sm placeholder-slate-500 w-40"
+        />
+        <select
+          value={filterPriority}
+          onChange={(e) => setFilterPriority(e.target.value)}
+          aria-label="Filter by priority"
+          className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-white text-sm capitalize"
+        >
+          <option value="">All priorities</option>
+          {TASK_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select
+          value={filterAssignee}
+          onChange={(e) => setFilterAssignee(e.target.value)}
+          aria-label="Filter by assignee"
+          className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-white text-sm"
+        >
+          <option value="">Everyone</option>
+          {members.map((m) => (
+            <option key={m.user_id} value={m.user_id}>{m.user?.name || m.user?.email}</option>
+          ))}
+        </select>
+        <div className="flex items-center gap-1">
+          <ArrowUpDown size={14} className="text-slate-500" />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            aria-label="Sort tasks"
+            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-white text-sm"
+          >
+            <option value="">Unsorted</option>
+            <option value="priority">Priority</option>
+            <option value="due_date">Due date</option>
+            <option value="title">Title</option>
+          </select>
+        </div>
       </div>
 
       <div className="flex gap-3 overflow-x-auto pb-4 -mx-1 px-1">

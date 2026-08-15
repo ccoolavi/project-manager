@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from middleware.auth import get_current_user
-from models import Habit, Project, SubProject, Task, TimeEntry, User
+from models import Project, SubProject, Task, TimeEntry, User
 from utils.tenancy import require_membership
 
 router = APIRouter(prefix="/api/orgs/{org_id}/analytics", tags=["analytics"])
@@ -69,49 +69,6 @@ async def task_analytics(
             "completion_rate": round(done / total, 3) if total else 0,
         },
         "projects": projects,
-    }
-
-
-@router.get("/habits")
-async def habit_analytics(
-    org_id: int,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Streak leaderboard and a 30-day completion rate."""
-    user_id = int(current_user.get("sub"))
-    require_membership(db, org_id, user_id)
-
-    habits = (
-        db.query(Habit, User.name, User.email)
-        .join(User, Habit.user_id == User.id)
-        .filter(Habit.organization_id == org_id)
-        .all()
-    )
-
-    cutoff = (datetime.utcnow() - timedelta(days=30)).date().isoformat()
-    leaderboard = []
-    total_possible = 0
-    total_completions = 0
-    for habit, name, email in habits:
-        recent = [d for d in (habit.completed_dates or []) if d >= cutoff]
-        leaderboard.append(
-            {
-                "habit_id": habit.id,
-                "title": habit.title,
-                "user_name": name or email,
-                "streak": habit.streak,
-                "completions_last_30d": len(recent),
-            }
-        )
-        total_possible += 30
-        total_completions += len(recent)
-
-    leaderboard.sort(key=lambda h: h["streak"], reverse=True)
-
-    return {
-        "leaderboard": leaderboard[:10],
-        "completion_rate_30d": round(total_completions / total_possible, 3) if total_possible else 0,
     }
 
 

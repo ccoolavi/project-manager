@@ -298,12 +298,12 @@ def cmd_task_move(args):
 
 
 def cmd_habit_list(args):
-    habits = request("GET", f"/api/orgs/{args.org}/habits", token=load_token())
+    habits = request("GET", "/api/habits", token=load_token())
     emit(habits, table=[("ID", "id"), ("TITLE", "title"), ("STREAK", "streak"), ("TARGET", "target_days")])
 
 
 def cmd_habit_check(args):
-    emit(request("POST", f"/api/orgs/{args.org}/habits/{args.habit}/check", token=load_token()))
+    emit(request("POST", f"/api/habits/{args.habit}/check", token=load_token()))
 
 
 def cmd_time_log(args):
@@ -517,12 +517,11 @@ def build_parser() -> argparse.ArgumentParser:
     tm.add_argument("--status", required=True, choices=["todo", "in_progress", "review", "done"])
     tm.set_defaults(func=cmd_task_move)
 
-    habit = sub.add_parser("habit", help="habits").add_subparsers(dest="sub")
+    # Habits are personal, not tied to any organization — no --org here.
+    habit = sub.add_parser("habit", help="habits (personal, not org-scoped)").add_subparsers(dest="sub")
     hl = add(habit, "list")
-    hl.add_argument("--org", type=int, required=True)
     hl.set_defaults(func=cmd_habit_list)
     hc = add(habit, "check")
-    hc.add_argument("--org", type=int, required=True)
     hc.add_argument("--habit", type=int, required=True)
     hc.set_defaults(func=cmd_habit_check)
 
