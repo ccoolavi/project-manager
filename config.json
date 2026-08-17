@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://servers-starter-functions-higher.trycloudflare.com",
+  "apiUrl": "https://bbs-polymer-bob-defeat.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
