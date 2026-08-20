@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://heart-hobby-campaigns-refine.trycloudflare.com",
+  "apiUrl": "https://assess-browse-legacy-work.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
