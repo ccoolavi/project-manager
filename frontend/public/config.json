@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://assess-browse-legacy-work.trycloudflare.com",
+  "apiUrl": "https://eddie-curtis-tops-oval.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
