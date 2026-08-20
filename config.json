@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://proc-iron-cal-raid.trycloudflare.com",
+  "apiUrl": "https://witnesses-fat-proud-monte.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
