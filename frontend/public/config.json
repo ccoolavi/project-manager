@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://showing-cent-loud-max.trycloudflare.com",
+  "apiUrl": "https://tin-till-cds-mandatory.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
