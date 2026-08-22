@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://msg-filters-maintains-representative.trycloudflare.com",
+  "apiUrl": "https://upon-webcast-town-seen.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
