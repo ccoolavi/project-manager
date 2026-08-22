@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://production-resolutions-con-speaks.trycloudflare.com",
+  "apiUrl": "https://wrote-tape-salaries-cluster.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
