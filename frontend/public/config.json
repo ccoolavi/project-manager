@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://myself-commission-demo-periods.trycloudflare.com",
+  "apiUrl": "https://inc-anyway-pottery-harvard.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
