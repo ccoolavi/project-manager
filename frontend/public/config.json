@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://apparently-perth-educators-mapping.trycloudflare.com",
+  "apiUrl": "https://speaking-tenant-zus-barry.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
