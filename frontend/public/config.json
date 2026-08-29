@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://hostels-admission-banana-thompson.trycloudflare.com",
+  "apiUrl": "https://avi-province-rocks-brakes.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
