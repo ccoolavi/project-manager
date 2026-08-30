@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://declaration-zero-frog-ambassador.trycloudflare.com",
+  "apiUrl": "https://names-eos-lisa-valuable.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
