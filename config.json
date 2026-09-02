@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://figure-ids-farmers-place.trycloudflare.com",
+  "apiUrl": "https://ontario-leaving-prescribed-signing.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
