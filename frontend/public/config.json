@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://shed-secrets-ladder-existing.trycloudflare.com",
+  "apiUrl": "https://stress-robbie-era-heard.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
