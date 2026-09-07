@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://frame-sociology-operational-cooling.trycloudflare.com",
+  "apiUrl": "https://pmc-satellite-modems-freely.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
