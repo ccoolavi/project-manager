@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://greeting-routes-assessment-voip.trycloudflare.com",
+  "apiUrl": "https://network-mouse-tells-latino.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
