@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://sides-tokyo-zinc-agricultural.trycloudflare.com",
+  "apiUrl": "https://rankings-kelkoo-rely-lots.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
