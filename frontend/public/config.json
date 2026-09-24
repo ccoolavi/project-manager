@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://wedding-alto-search-tenant.trycloudflare.com",
+  "apiUrl": "https://oasis-itself-joined-neural.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
