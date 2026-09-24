@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://science-morrison-regards-denver.trycloudflare.com",
+  "apiUrl": "https://contained-targets-timer-headed.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
