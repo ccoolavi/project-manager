@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://checklist-weather-test-mas.trycloudflare.com",
+  "apiUrl": "https://gen-harvest-platforms-convert.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
