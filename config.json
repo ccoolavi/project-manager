@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://zum-lyric-gotten-cloud.trycloudflare.com",
+  "apiUrl": "https://living-wed-tmp-intl.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
