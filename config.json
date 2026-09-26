@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://albums-reuters-annotation-adjust.trycloudflare.com",
+  "apiUrl": "https://movies-ben-doc-stockings.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
