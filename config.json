@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://living-wed-tmp-intl.trycloudflare.com",
+  "apiUrl": "https://lean-moments-possibly-years.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
