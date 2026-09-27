@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://intranet-sampling-commodity-institution.trycloudflare.com",
+  "apiUrl": "https://clusters-male-challenges-rev.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
