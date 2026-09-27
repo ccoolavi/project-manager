@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://queens-acres-bryan-grand.trycloudflare.com",
+  "apiUrl": "https://treatment-tap-tests-rentals.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
