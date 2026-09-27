@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://remaining-contained-recommended-los.trycloudflare.com",
+  "apiUrl": "https://weather-expansys-gibraltar-collector.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
