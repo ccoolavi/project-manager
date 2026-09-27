@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://designs-tiles-includes-monkey.trycloudflare.com",
+  "apiUrl": "https://wheat-episodes-laser-chart.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
