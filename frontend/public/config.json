@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://buddy-individuals-brooklyn-clean.trycloudflare.com",
+  "apiUrl": "https://webcast-policies-events-puerto.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
