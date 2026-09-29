@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://operate-classical-alter-masters.trycloudflare.com",
+  "apiUrl": "https://thinking-fcc-jury-creature.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
