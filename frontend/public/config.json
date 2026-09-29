@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://split-rows-subcommittee-meter.trycloudflare.com",
+  "apiUrl": "https://earliest-switched-davis-tunnel.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
