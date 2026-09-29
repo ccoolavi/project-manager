@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://changing-apartments-radius-christina.trycloudflare.com",
+  "apiUrl": "https://geek-quiz-environments-cabinet.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
