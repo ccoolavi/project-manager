@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://love-portal-white-hampton.trycloudflare.com",
+  "apiUrl": "https://distributions-orchestra-facial-inline.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
