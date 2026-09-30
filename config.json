@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://close-notified-dns-soonest.trycloudflare.com",
+  "apiUrl": "https://review-col-cow-meter.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
