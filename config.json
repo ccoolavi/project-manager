@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://review-col-cow-meter.trycloudflare.com",
+  "apiUrl": "https://plates-map-participant-parental.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
