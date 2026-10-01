@@ -1,4 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime, timedelta
@@ -77,7 +78,11 @@ async def login(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    """Login with an email address or phone number, and a password.
+    """Login with an email address and a password.
+
+    Email only: nothing here can verify that a phone number belongs to the person who typed it, so a phone number is
+    never used to find an account.
+
 
     A device the account has never signed in from before must clear an
     email-OTP challenge; the endpoint then returns ``{otp_required: true}``
@@ -93,16 +98,12 @@ async def login(
     address_key = f"addr:{login_guard.client_address(request)}"
     login_guard.enforce(account_keys, address_key)          # refuse BEFORE checking: a right guess during a lockout must not work either
 
-    user = (
-        db.query(User)
-        .filter((User.email == identifier) | (User.phone == identifier))
-        .first()
-    )
+    user = db.query(User).filter(func.lower(User.email) == identifier.lower()).first()
     if not user or not verify_password(credentials.password, user.password_hash):
         login_guard.failed(account_keys, address_key)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email/phone or password"
+            detail="Invalid email or password"
         )
     login_guard.succeeded(account_keys)
 

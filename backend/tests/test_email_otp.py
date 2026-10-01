@@ -193,7 +193,8 @@ def test_sensitive_action_skips_when_no_email_on_file(client):
     assert res.status_code == 200
 
 
-def test_login_accepts_phone_as_identifier(client):
+def test_a_phone_number_is_not_a_login_identifier(client):
+    """Nothing can verify a phone number, so it never identifies an account (sign-in is by email only)."""
     from database import get_db
     from main import app
     from models import User
@@ -205,6 +206,7 @@ def test_login_accepts_phone_as_identifier(client):
     user.phone = "9999999999"
     db.commit()
 
-    res = _login(client, "9999999999")
+    assert _login(client, "9999999999").status_code == 401
+    res = _login(client, "PhoneUser@Test.com")                    # the email still works, in any letter case
     assert res.status_code == 200
     assert "access_token" in res.json()

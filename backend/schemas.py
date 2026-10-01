@@ -5,8 +5,7 @@ from models import UserRole, TaskStatus, TaskPriority, ProjectStatus, InviteStat
 
 # User Schemas
 class UserLogin(BaseModel):
-    # Accepts either an email address or a phone number; EmailStr would reject
-    # phone-number logins outright.
+    # Kept as a plain string so a malformed address gets the same "invalid email or password" answer as a wrong one.
     identifier: str
     password: str
     device_id: Optional[str] = None

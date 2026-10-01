@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -51,7 +52,7 @@ async def verify_login_otp(payload: VerifyLoginOTP, request: Request, db: Sessio
     identifier = payload.identifier.strip()
     user = (
         db.query(User)
-        .filter((User.email == identifier) | (User.phone == identifier))
+        .filter(func.lower(User.email) == identifier.lower())
         .first()
     )
     if not user:

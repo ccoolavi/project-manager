@@ -76,14 +76,14 @@ export default function LoginPage() {
           {!awaitingOtp ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2" htmlFor="login-identifier">Email or phone</label>
+                <label className="block text-sm font-medium text-slate-300 mb-2" htmlFor="login-identifier">Email</label>
                 <input
                   id="login-identifier"
-                  type="text"
+                  type="email"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-brand-500"
-                  placeholder="your@email.com or phone number"
+                  placeholder="your@email.com"
                   autoComplete="username"
                 />
               </div>

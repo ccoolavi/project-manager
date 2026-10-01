@@ -26,7 +26,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   /**
-   * Logs in with an email or phone number. When the device has not signed
+   * Logs in with an email address. When the device has not signed
    * into this account before, the server holds the login and asks for an
    * emailed code instead of returning tokens — in that case this resolves to
    * `{ otpRequired: true, message }` rather than a user object, and the

@@ -10,7 +10,7 @@ const FIELD_LABELS = {
   confirm_password: 'Confirm password',
   name: 'Name',
   title: 'Title',
-  identifier: 'Email or phone',
+  identifier: 'Email',
   code: 'Code',
   phone: 'Phone number',
   duration_minutes: 'Minutes',

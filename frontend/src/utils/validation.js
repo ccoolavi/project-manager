@@ -1,9 +1,9 @@
 import { z } from 'zod'
 
-// Login accepts either an email address or a phone number, so this can't
-// require email() formatting the way registration does.
+// Sign-in is by email address only (a phone number cannot be verified). The format is not enforced here so a mistyped
+// address gets the same answer as a wrong password.
 export const loginSchema = z.object({
-  identifier: z.string().min(3, 'Enter your email or phone number'),
+  identifier: z.string().min(3, 'Enter your email address'),
   password: z.string().min(1, 'Password required')
 })
 
