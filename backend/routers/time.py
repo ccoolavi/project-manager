@@ -26,6 +26,8 @@ async def create_time_entry(
 
     if entry_data.duration_minutes <= 0:
         raise HTTPException(status_code=400, detail="Duration must be greater than zero")
+    if entry_data.duration_minutes > 24 * 60:
+        raise HTTPException(status_code=400, detail="One entry cannot be longer than 24 hours (1440 minutes)")
 
     new_entry = TimeEntry(
         organization_id=org_id,

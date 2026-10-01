@@ -235,3 +235,26 @@ def test_expired_otp_is_rejected(client, captured_codes):
 
 def test_otp_requires_authentication(client):
     assert client.post("/api/auth/otp/request", json={"phone": "9000000007"}).status_code == 403
+
+
+def test_time_entry_cannot_exceed_a_day_and_can_be_deleted(client):
+    ctx = make_org_with_project(client, "time3@test.com")
+    base = f"/api/orgs/{ctx['org_id']}/time"
+    too_long = client.post(base, json={"duration_minutes": 24 * 60 + 1}, headers=auth(ctx["token"]))
+    assert too_long.status_code == 400
+    entry = client.post(base, json={"duration_minutes": 90, "category": "meeting"}, headers=auth(ctx["token"])).json()
+    assert client.delete(f"{base}/{entry['id']}", headers=auth(ctx["token"])).status_code == 200
+    assert client.get(base, headers=auth(ctx["token"])).json() == []
+    assert client.delete(f"{base}/{entry['id']}", headers=auth(ctx["token"])).status_code == 404
+
+
+def test_blank_titles_and_out_of_range_targets_are_rejected(client):
+    ctx = make_org_with_project(client, "blank1@test.com")
+    h = auth(ctx["token"])
+    assert client.post("/api/habits", json={"title": "   "}, headers=h).status_code == 422
+    assert client.post("/api/habits", json={"title": "Run", "target_days": 0}, headers=h).status_code == 422
+    assert client.post("/api/habits", json={"title": "Run", "target_days": 8}, headers=h).status_code == 422
+    ok = client.post("/api/habits", json={"title": "  Run  ", "target_days": 3}, headers=h)
+    assert ok.status_code == 200 and ok.json()["title"] == "Run"  # surrounding spaces are trimmed
+    kaizen = f"/api/orgs/{ctx['org_id']}/kaizen"
+    assert client.post(kaizen, json={"title": " ", "problem": "p", "solution": "s"}, headers=h).status_code == 422

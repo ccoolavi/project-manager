@@ -1,9 +1,11 @@
 import React, { createContext, useState } from 'react'
 import api from '../utils/api'
+import { useToast } from '../components/Toast'
 
 export const OrgContext = createContext(null)
 
 export function OrgProvider({ children }) {
+  const toast = useToast()
   const [currentOrg, setCurrentOrg] = useState(null)
   const [orgs, setOrgs] = useState([])
   const [loading, setLoading] = useState(false)
@@ -43,6 +45,7 @@ export function OrgProvider({ children }) {
       }
     } catch (error) {
       console.error('Failed to fetch orgs:', error)
+      toast.fromError(error, 'Could not load your organisations.')
     }
     setLoading(false)
     setInitialized(true)
@@ -59,7 +62,7 @@ export function OrgProvider({ children }) {
 
   const createOrg = async (name, description = '') => {
     const res = await api.post('/api/orgs', { name, description })
-    setOrgs([...orgs, res.data])
+    setOrgs((cur) => [...cur, res.data])
     setCurrentOrg(res.data)
     localStorage.setItem('current_org', res.data.id)
     // The sign-up token carries no org claims; without this the new owner would

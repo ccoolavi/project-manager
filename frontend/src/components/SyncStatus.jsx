@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CloudOff, RefreshCw, Check } from 'lucide-react'
 import { flushQueue, queueLength } from '../utils/offlineQueue'
-import { replayQueued } from '../utils/api'
+import { replayQueued, refreshApiUrl } from '../utils/api'
 
 /**
  * A small, plain-language indicator: whether the device is offline, how many
@@ -11,17 +11,34 @@ import { replayQueued } from '../utils/api'
 export default function SyncStatus() {
   const [online, setOnline] = useState(navigator.onLine)
   const [pending, setPending] = useState(0)
+  const pendingRef = useRef(0)
   const [syncing, setSyncing] = useState(false)
   const [justSynced, setJustSynced] = useState(false)
 
-  const refresh = async () => setPending(await queueLength().catch(() => 0))
+  const refresh = async () => {
+    const n = await queueLength().catch(() => 0)
+    pendingRef.current = n
+    setPending(n)
+  }
 
   const sync = async () => {
     if (!navigator.onLine) return
     setSyncing(true)
-    const { sent } = await flushQueue(replayQueued, setPending)
+    await refreshApiUrl().catch(() => {}) // the API address may have changed while the changes were waiting
+    const { sent, dropped } = await flushQueue(replayQueued, setPending)
     setSyncing(false)
     await refresh()
+    if (dropped > 0) {
+      // The server refused these (no longer allowed, or the item is gone). Say so instead of letting them vanish.
+      window.dispatchEvent(
+        new CustomEvent('kaizenpm:toast', {
+          detail: {
+            type: 'error',
+            message: `${dropped} change${dropped === 1 ? '' : 's'} saved on this device could not be applied (you may no longer have access, or the item was removed).`
+          }
+        })
+      )
+    }
     if (sent > 0) {
       setJustSynced(true)
       setTimeout(() => setJustSynced(false), 4000)
@@ -40,8 +57,14 @@ export default function SyncStatus() {
     window.addEventListener('offline', goOffline)
     window.addEventListener('kaizenpm:queued', onQueued)
     if (navigator.onLine) sync()
+    // Changes waiting while the device IS online mean the server could not be reached (for example its address just
+    // changed). Keep trying quietly instead of waiting for a page reload.
+    const retry = setInterval(() => {
+      if (navigator.onLine && pendingRef.current > 0) sync()
+    }, 15000)
 
     return () => {
+      clearInterval(retry)
       window.removeEventListener('online', goOnline)
       window.removeEventListener('offline', goOffline)
       window.removeEventListener('kaizenpm:queued', onQueued)

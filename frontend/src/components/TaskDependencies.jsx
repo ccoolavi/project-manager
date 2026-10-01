@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Lock, X, Plus } from 'lucide-react'
 import api from '../utils/api'
+import { errorMessage } from '../utils/errors'
 
 /**
  * "Blocked by" section of the Task Detail Panel: the tasks this one is
@@ -57,7 +58,7 @@ export default function TaskDependencies({ orgId, projectId, subProjectId, task,
       setSelected('')
       onBlockedChange?.()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not add that dependency.')
+      setError(errorMessage(err, 'Could not add that dependency.'))
     }
   }
 

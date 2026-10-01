@@ -68,7 +68,24 @@ export function AuthProvider({ children }) {
     return userData
   }
 
+  // The API layer raises this when the session cannot be renewed (refresh token expired or refused, or signed out elsewhere).
+  useEffect(() => {
+    const onExpired = () => {
+      if (typeof caches !== 'undefined') caches.delete('api-cache').catch(() => {})
+      ;['access_token', 'refresh_token', 'user', 'current_org'].forEach((k) => localStorage.removeItem(k))
+      setUser(null)
+      window.dispatchEvent(
+        new CustomEvent('kaizenpm:toast', { detail: { type: 'info', message: 'Your session ended. Please sign in again.' } })
+      )
+    }
+    window.addEventListener('kaizenpm:session-expired', onExpired)
+    return () => window.removeEventListener('kaizenpm:session-expired', onExpired)
+  }, [])
+
   const logout = () => {
+    // The service worker keeps recent API answers for offline use. They belong to whoever was signed in, so they must not
+    // outlive the session: the next person to use this device would otherwise be offered them while offline.
+    if (typeof caches !== 'undefined') caches.delete('api-cache').catch(() => {})
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
     localStorage.removeItem('user')

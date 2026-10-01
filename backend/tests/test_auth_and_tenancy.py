@@ -176,3 +176,73 @@ def test_personal_data_does_not_bleed_between_users(client):
     assert client.get(
         f"/api/orgs/{bob['org_id']}/kaizen", headers=auth(bob["token"])
     ).json() == []
+
+
+# --- silent session renewal -----------------------------------------------------------------------------------------------
+
+def _login_body(client, email, password="TestPass123"):
+    res = client.post("/api/auth/login", json={"identifier": email, "password": password})
+    assert res.status_code == 200, res.text
+    return res.json()
+
+
+def test_a_refresh_token_renews_the_session(client):
+    register(client, "renew1@test.com")
+    body = _login_body(client, "renew1@test.com")
+    res = client.post("/api/auth/token/refresh", json={"refresh_token": body["refresh_token"]})
+    assert res.status_code == 200, res.text
+    fresh = res.json()
+    assert fresh["access_token"] and fresh["refresh_token"] and fresh["user"]["email"] == "renew1@test.com"
+    assert client.get("/api/orgs", headers=auth(fresh["access_token"])).status_code == 200   # the new token really works
+
+
+def test_a_refresh_token_is_not_accepted_as_an_access_token(client):
+    register(client, "renew2@test.com")
+    body = _login_body(client, "renew2@test.com")
+    res = client.get("/api/orgs", headers=auth(body["refresh_token"]))
+    assert res.status_code == 401, res.text
+
+
+def test_an_access_token_is_not_accepted_for_renewal_and_garbage_is_refused(client):
+    register(client, "renew3@test.com")
+    body = _login_body(client, "renew3@test.com")
+    assert client.post("/api/auth/token/refresh", json={"refresh_token": body["access_token"]}).status_code == 401
+    assert client.post("/api/auth/token/refresh", json={"refresh_token": "not.a.token"}).status_code == 401
+    assert client.post("/api/auth/token/refresh", json={}).status_code == 422
+
+
+def test_renewal_keeps_the_organisation_and_rechecks_membership(client):
+    from database import get_db
+    from main import app
+    from models import OrganizationMember, User
+    from utils.security import decode_token
+
+    ctx = make_org_with_project(client, "renew4@test.com")
+    second = client.post("/api/orgs", json={"name": "Second"}, headers=auth(ctx["token"])).json()
+    scoped = client.post(f"/api/auth/refresh?org_id={second['id']}", headers=auth(ctx["token"])).json()
+    renewed = client.post("/api/auth/token/refresh", json={"refresh_token": scoped["refresh_token"]}).json()
+    assert decode_token(renewed["access_token"])["org_id"] == second["id"]       # still the organisation it was scoped to
+
+    db = next(app.dependency_overrides[get_db]())                                  # the person is removed from that organisation
+    user = db.query(User).filter(User.email == "renew4@test.com").first()
+    db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == user.id, OrganizationMember.organization_id == second["id"]
+    ).delete()
+    db.commit()
+    db.close()
+    after = client.post("/api/auth/token/refresh", json={"refresh_token": scoped["refresh_token"]}).json()
+    assert decode_token(after["access_token"])["org_id"] == ctx["org_id"]         # falls back to an organisation they still belong to
+
+
+def test_a_deactivated_account_cannot_renew(client):
+    from database import get_db
+    from main import app
+    from models import User
+
+    register(client, "renew5@test.com")
+    body = _login_body(client, "renew5@test.com")
+    db = next(app.dependency_overrides[get_db]())
+    db.query(User).filter(User.email == "renew5@test.com").first().is_active = False
+    db.commit()
+    db.close()
+    assert client.post("/api/auth/token/refresh", json={"refresh_token": body["refresh_token"]}).status_code == 401

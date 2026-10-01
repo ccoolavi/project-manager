@@ -22,6 +22,7 @@ import ActivityLog from '../components/ActivityLog'
 import MyOrganizationsPage from './MyOrganizationsPage'
 import MyTimelinePage from './MyTimelinePage'
 import api from '../utils/api'
+import { useToast } from '../components/Toast'
 
 // Tab ids are lowercase slugs; these are the words the user should actually see.
 const TAB_TITLES = {
@@ -42,8 +43,9 @@ const TAB_TITLES = {
 }
 
 export default function DashboardPage() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const { currentOrg, createOrg, initialized } = useOrg()
+  const toast = useToast()
   const { formatDate } = useLocalization()
   const [activeTab, setActiveTab] = useState('tasks')
   const [selectedProjectId, setSelectedProjectId] = useState(null)
@@ -51,6 +53,21 @@ export default function DashboardPage() {
   const [showCreateOrgModal, setShowCreateOrgModal] = useState(false)
   const [orgName, setOrgName] = useState('')
   const [loading, setLoading] = useState(false)
+  // Bumped after offline changes have been sent, so every open screen re-reads the server's version of the truth.
+  const [syncTick, setSyncTick] = useState(0)
+
+  useEffect(() => {
+    const onSynced = () => setSyncTick((t) => t + 1)
+    window.addEventListener('kaizenpm:synced', onSynced)
+    return () => window.removeEventListener('kaizenpm:synced', onSynced)
+  }, [])
+
+  // Project and section ids belong to ONE organisation. Keeping the old ones after switching organisations pointed the
+  // board at another organisation's project, so loading and adding tasks failed.
+  useEffect(() => {
+    setSelectedProjectId(null)
+    setSelectedSubProjectId(null)
+  }, [currentOrg?.id])
 
   useEffect(() => {
     // Only offer the first-run modal once the org list has actually loaded.
@@ -75,15 +92,19 @@ export default function DashboardPage() {
   }, [])
 
   const handleCreateOrg = async () => {
-    if (!orgName.trim()) return
+    if (loading) return
+    if (!orgName.trim()) {
+      toast.error('Type a name for your organization first.')
+      return
+    }
     setLoading(true)
     try {
-      await createOrg(orgName)
+      await createOrg(orgName.trim())
       setOrgName('')
       setShowCreateOrgModal(false)
     } catch (err) {
       console.error('Failed to create org:', err)
-      alert('Failed to create organization')
+      toast.fromError(err, 'Could not create the organization.')
     }
     setLoading(false)
   }
@@ -98,13 +119,17 @@ export default function DashboardPage() {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-md w-full mx-4">
           <h2 className="text-2xl font-bold text-white mb-2">Welcome, {user?.name}!</h2>
+          {/* Someone invited to an existing organisation must be able to accept here, before being asked to make a new one. */}
+          <PendingInvites />
           <p className="text-slate-400 mb-6">Create your first organization to get started</p>
 
           <input
             type="text"
             value={orgName}
             onChange={(e) => setOrgName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleCreateOrg()}
             placeholder="Organization name..."
+            aria-label="Organization name"
             className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white mb-4"
           />
 
@@ -114,6 +139,13 @@ export default function DashboardPage() {
             className="w-full py-2 bg-brand-500 hover:bg-brand-600 text-white font-semibold rounded-lg disabled:opacity-50"
           >
             {loading ? 'Creating...' : 'Create Organization'}
+          </button>
+          <button
+            type="button"
+            onClick={logout}
+            className="mt-3 w-full text-sm text-slate-400 hover:text-white"
+          >
+            Not you? Log out
           </button>
         </div>
       </div>
@@ -133,7 +165,7 @@ export default function DashboardPage() {
       <Navbar />
       <div className="flex">
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 pb-28 lg:pb-8">
+        <main key={syncTick} className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 pb-28 lg:pb-8">
           <div className="max-w-6xl mx-auto">
             <div className="flex justify-between items-center mb-8">
               <div>

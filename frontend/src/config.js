@@ -15,7 +15,22 @@
 
 const BUILD_TIME_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8090'
 
-let resolvedApiUrl = BUILD_TIME_API_URL
+const LAST_GOOD_KEY = 'kaizenpm.apiUrl'
+
+/**
+ * The address that worked last time is a better fallback than the one frozen into the bundle at build time: the tunnel's
+ * address changes, so after a rotation the built-in one is stale while the last good one is almost always still current.
+ * (This matters when the app is opened while offline, before config.json can be fetched.)
+ */
+function rememberedApiUrl() {
+  try {
+    return localStorage.getItem(LAST_GOOD_KEY) || null
+  } catch {
+    return null
+  }
+}
+
+let resolvedApiUrl = rememberedApiUrl() || BUILD_TIME_API_URL
 
 export function getApiUrl() {
   return resolvedApiUrl
@@ -30,6 +45,11 @@ export async function loadRuntimeConfig() {
       const cfg = await res.json()
       if (cfg.apiUrl) {
         resolvedApiUrl = cfg.apiUrl.replace(/\/$/, '')
+        try {
+          localStorage.setItem(LAST_GOOD_KEY, resolvedApiUrl)
+        } catch {
+          // storage unavailable (private mode): the in-memory value still works for this session
+        }
       }
     }
   } catch {

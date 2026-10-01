@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import api from '../utils/api'
+import { errorMessage } from '../utils/errors'
 
 /**
  * Wraps a destructive API call so that when the server responds 428
@@ -47,7 +48,7 @@ export function useSensitiveAction() {
       setCode('')
       await retry()
     } catch (err) {
-      setError(err.response?.data?.detail || 'That code did not work')
+      setError(errorMessage(err, 'That code did not work'))
     }
     setBusy(false)
   }

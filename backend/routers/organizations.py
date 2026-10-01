@@ -127,13 +127,16 @@ async def add_member(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Invite a member to organization (admin+ only)"""
+    """Add a member to the organization (owner/admin only)."""
     user_id = int(current_user.get("sub"))
-    user_role = current_user.get("role")
 
-    # Check if user is admin+
-    if user_role not in ["owner", "admin"]:
-        raise HTTPException(status_code=403, detail="Only admins can add members")
+    # Authority comes from the caller's membership of THIS organisation, never from the role claim in the token: that claim
+    # describes whichever organisation the token was last scoped to, so trusting it let the owner of any organisation
+    # add people (including themselves, as owner) to every other one.
+    caller = require_membership(db, org_id, user_id)
+    require_role(caller, "owner", "admin")
+    if invite.role == UserRole.owner and caller.role.value != "owner":
+        raise HTTPException(status_code=403, detail="Only an owner can grant the owner role")
 
     # If the invitee already has an account, add them straight away — same
     # behavior as before. If not, provision the account here rather than
@@ -352,10 +355,9 @@ async def remove_member(
 ):
     """Remove a member from organization (owner only)"""
     user_id = int(current_user.get("sub"))
-    user_role = current_user.get("role")
 
-    # Check if user is owner
-    if user_role != "owner":
+    caller = require_membership(db, org_id, user_id)  # membership of THIS organisation, not the token's role claim
+    if caller.role.value != "owner":
         raise HTTPException(status_code=403, detail="Only owner can remove members")
 
     member = db.query(OrganizationMember).filter(
@@ -365,6 +367,15 @@ async def remove_member(
 
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
+
+    if member.role.value == "owner":
+        other_owners = db.query(OrganizationMember).filter(
+            OrganizationMember.organization_id == org_id,
+            OrganizationMember.role == UserRole.owner,
+            OrganizationMember.id != member_id,
+        ).count()
+        if other_owners == 0:
+            raise HTTPException(status_code=400, detail="Promote someone else to owner first")
 
     removed_user_id = member.user_id
     db.delete(member)
@@ -382,10 +393,9 @@ async def list_invites(
     db: Session = Depends(get_db)
 ):
     """List pending invites for organization (admin+ only)"""
-    user_role = current_user.get("role")
-
-    if user_role not in ["owner", "admin"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    user_id = int(current_user.get("sub"))
+    caller = require_membership(db, org_id, user_id)
+    require_role(caller, "owner", "admin")
 
     invites = db.query(OrganizationInvite).filter(
         OrganizationInvite.organization_id == org_id,
@@ -412,16 +422,23 @@ async def accept_invite(
     if not invite:
         raise HTTPException(status_code=404, detail="Invite not found")
 
+    # An invitation is addressed to an email, not to whoever happens to know its number.
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or invite.email.lower() != user.email.lower():
+        raise HTTPException(status_code=403, detail="That invitation is for someone else")
+
     if invite.status != InviteStatus.pending:
         raise HTTPException(status_code=400, detail="Invite already processed")
 
-    # Add user to organization
-    member = OrganizationMember(
-        organization_id=org_id,
-        user_id=user_id,
-        role=invite.role
-    )
-    db.add(member)
+    if invite.expires_at and invite.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="That invitation has expired")
+
+    already = db.query(OrganizationMember).filter(
+        OrganizationMember.organization_id == org_id,
+        OrganizationMember.user_id == user_id,
+    ).first()
+    if not already:
+        db.add(OrganizationMember(organization_id=org_id, user_id=user_id, role=invite.role))
     invite.status = InviteStatus.accepted
     db.commit()
 

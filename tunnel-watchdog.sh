@@ -25,7 +25,9 @@ if [ -z "${OLD_URL:-}" ]; then
 fi
 
 # Health check against the live tunnel
-if curl -fsS -m 8 "$OLD_URL/api/health" 2>/dev/null | grep -q "API is healthy"; then
+# The API is FastAPI now: /api/health returns {"status":"ok",...}. The old check looked for the PocketBase-era text
+# "API is healthy", which never matches, so every run wrongly declared the tunnel dead and rotated it (55-64x/day).
+if curl -fsS -m 8 "$OLD_URL/api/health" 2>/dev/null | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"'; then
   log "Tunnel healthy: $OLD_URL"
   exit 0
 fi

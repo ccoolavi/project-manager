@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from middleware.auth import get_current_user
-from models import Project, SubProject, Task, TimeEntry, User
+from models import Habit, Project, SubProject, Task, TimeEntry, User
 from utils.tenancy import require_membership
 
 router = APIRouter(prefix="/api/orgs/{org_id}/analytics", tags=["analytics"])
@@ -106,6 +106,42 @@ async def time_analytics(
         }
         for (uid, category), minutes in totals.items()
     ]
+
+
+@router.get("/habits")
+async def habit_analytics(
+    org_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The caller's OWN habit consistency over the last 30 days.
+
+    Habits are strictly personal (see routers/habits.py), so this never reads anyone else's: it is shown in the
+    organisation's analytics only because that is where the person looks at their numbers. Each habit is expected
+    ``target_days`` times per week; consistency is the share of those expected check-ins that actually happened
+    (extra check-ins do not make up for missed days on another habit).
+    """
+    user_id = int(current_user.get("sub"))
+    require_membership(db, org_id, user_id)
+
+    window_start = (datetime.utcnow() - timedelta(days=30)).date().isoformat()
+    habits = db.query(Habit).filter(Habit.user_id == user_id).all()
+
+    expected = 0
+    achieved = 0
+    check_ins = 0
+    for habit in habits:
+        days = {d for d in (habit.completed_dates or []) if isinstance(d, str) and d >= window_start}
+        want = max(1, round((habit.target_days or 7) * 30 / 7))
+        expected += want
+        achieved += min(len(days), want)
+        check_ins += len(days)
+
+    return {
+        "habit_count": len(habits),
+        "check_ins_30d": check_ins,
+        "completion_rate_30d": round(achieved / expected, 3) if expected else 0,
+    }
 
 
 @router.get("/velocity")

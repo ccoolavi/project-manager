@@ -7,6 +7,7 @@ import { ROLE_LABELS } from '../config'
 import { hasRole } from '../utils/permissions'
 import { useSensitiveAction } from '../hooks/useSensitiveAction'
 import SensitiveActionModal from './SensitiveActionModal'
+import { errorMessage } from '../utils/errors'
 
 const INVITABLE_ROLES = ['admin', 'editor', 'member', 'viewer']
 const PROJECT_INVITABLE_ROLES = ['viewer', 'editor']
@@ -20,6 +21,7 @@ export default function MemberManager() {
   const [role, setRole] = useState('member')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [confirmRemoveId, setConfirmRemoveId] = useState(null) // the member waiting for "are you sure?"
   const [notice, setNotice] = useState('')
   const [scopes, setScopes] = useState([])
   const [scopeKey, setScopeKey] = useState('org') // 'org' or `project:<id>`
@@ -71,7 +73,7 @@ export default function MemberManager() {
       await api.patch(`/api/orgs/${currentOrg.id}/members/${memberId}`, { role: newRole })
       await load()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not change that role.')
+      setError(errorMessage(err, 'Could not change that role.'))
     }
   }
 
@@ -88,7 +90,10 @@ export default function MemberManager() {
 
   const invite = async () => {
     const trimmed = email.trim()
-    if (!trimmed) return
+    if (!trimmed) {
+      setError('Type the email address of the person to add first.')
+      return
+    }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
       setError('Please enter a valid email address.')
       return
@@ -114,7 +119,7 @@ export default function MemberManager() {
       setError(
         err?.response?.status === 403
           ? 'Only owners and admins can add people.'
-          : err?.response?.data?.detail || 'Could not send the invitation.'
+          : errorMessage(err, 'Could not send the invitation.')
       )
     }
   }
@@ -201,13 +206,35 @@ export default function MemberManager() {
                   </span>
                 )}
                 {canManage && m.role !== 'owner' && m.user?.email !== user?.email && (
-                  <button
-                    onClick={() => remove(m.id, m.user?.name || m.user?.email)}
-                    aria-label={`Remove ${m.user?.email}`}
-                    className="p-1 hover:bg-red-500/20 rounded text-red-400"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  confirmRemoveId === m.id ? (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setConfirmRemoveId(null)
+                          remove(m.id, m.user?.name || m.user?.email)
+                        }}
+                        aria-label={`Confirm removing ${m.user?.email}`}
+                        className="px-2 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded"
+                      >
+                        Remove
+                      </button>
+                      <button
+                        onClick={() => setConfirmRemoveId(null)}
+                        aria-label="Cancel removing"
+                        className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-white rounded"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmRemoveId(m.id)}
+                      aria-label={`Remove ${m.user?.email}`}
+                      className="p-1 hover:bg-red-500/20 rounded text-red-400"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )
                 )}
               </div>
             </div>

@@ -1,16 +1,22 @@
-import { useState, useEffect } from 'react'
-import { Plus, Trash2, ChevronRight, ChevronLeft, MessageSquare, Lock, X, ArrowUpDown } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Plus, Trash2, ChevronRight, ChevronLeft, MessageSquare, Lock, X, ArrowUpDown, Clock } from 'lucide-react'
 import api from '../utils/api'
 import { useOrg } from '../context/OrgContext'
 import TaskDetailPanel from './TaskDetailPanel'
+import { useToast } from './Toast'
 import { TASK_STATUSES, TASK_PRIORITIES } from '../config'
 
 const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' }
 
 export default function KanbanBoard({ projectId, subProjectId }) {
   const { currentOrg } = useOrg()
+  const toast = useToast()
   const [tasks, setTasks] = useState([])
   const [newTask, setNewTask] = useState('')
+  const [creating, setCreating] = useState(false)
+  const creatingRef = useRef(false) // synchronous guard: two quick clicks can both run before React re-renders the disabled button
+  const [creatingSection, setCreatingSection] = useState(false)
+  const creatingSectionRef = useRef(false)
   const [loading, setLoading] = useState(false)
   const [openTaskId, setOpenTaskId] = useState(null)
   const [members, setMembers] = useState([])
@@ -44,44 +50,81 @@ export default function KanbanBoard({ projectId, subProjectId }) {
       setSelectedIds((cur) => new Set([...cur].filter((id) => res.data.some((t) => t.id === id))))
     } catch (err) {
       console.error('Failed to fetch tasks:', err)
+      toast.fromError(err, 'Could not load the tasks.')
     }
     setLoading(false)
   }
 
+  const base = `/api/orgs/${currentOrg?.id}/projects/${projectId}/tasks/${subProjectId}`
+  const isPending = (id) => typeof id === 'string' // a task parked on this device (offline) until it can be sent
+
   const createTask = async () => {
-    if (!newTask.trim() || !subProjectId) return
+    const title = newTask.trim()
+    if (creatingRef.current) return
+    if (!title) {
+      toast.info('Type a task title first.')
+      return
+    }
+    if (!subProjectId) return
+    creatingRef.current = true
+    setCreating(true)
     try {
-      const res = await api.post(
-        `/api/orgs/${currentOrg.id}/projects/${projectId}/tasks/${subProjectId}`,
-        { title: newTask, status: 'todo', priority: 'medium' }
-      )
-      setTasks([...tasks, res.data])
+      const res = await api.post(base, { title, status: 'todo', priority: 'medium' })
+      setTasks((cur) => [...cur, res.data])
       setNewTask('')
     } catch (err) {
-      console.error('Failed to create task:', err)
+      if (err.queued) {
+        // The server could not be reached, but the task is saved on this device and will be sent automatically.
+        setTasks((cur) => [...cur, { id: `pending-${Date.now()}`, title, status: 'todo', priority: 'medium', _pending: true }])
+        setNewTask('')
+      } else {
+        console.error('Failed to create task:', err)
+        toast.fromError(err, 'Could not add the task.')
+      }
     }
+    creatingRef.current = false
+    setCreating(false)
   }
 
   const updateTaskStatus = async (taskId, newStatus) => {
+    if (isPending(taskId)) return
     try {
-      const res = await api.put(
-        `/api/orgs/${currentOrg.id}/projects/${projectId}/tasks/${subProjectId}/${taskId}`,
-        { status: newStatus }
-      )
-      setTasks(tasks.map(t => t.id === taskId ? res.data : t))
+      const res = await api.put(`${base}/${taskId}`, { status: newStatus })
+      setTasks((cur) => cur.map((t) => (t.id === taskId ? res.data : t)))
     } catch (err) {
       console.error('Failed to update task:', err)
+      toast.fromError(err, 'Could not move the task.')
     }
   }
 
   const deleteTask = async (taskId) => {
+    if (isPending(taskId)) {
+      toast.info('This task is still waiting to be saved. Delete it once it has synced.')
+      return
+    }
     try {
-      await api.delete(`/api/orgs/${currentOrg.id}/projects/${projectId}/tasks/${subProjectId}/${taskId}`)
-      setTasks(tasks.filter(t => t.id !== taskId))
+      await api.delete(`${base}/${taskId}`)
+      setTasks((cur) => cur.filter((t) => t.id !== taskId))
       if (openTaskId === taskId) setOpenTaskId(null)
     } catch (err) {
       console.error('Failed to delete task:', err)
+      toast.fromError(err, 'Could not delete the task.')
     }
+  }
+
+  const createDefaultSection = async () => {
+    if (!projectId || creatingSectionRef.current) return
+    creatingSectionRef.current = true
+    setCreatingSection(true)
+    try {
+      await api.post(`/api/orgs/${currentOrg.id}/projects/${projectId}/sub-projects`, { name: 'General', status: 'active' })
+      // ProjectList owns the section list: ask it to reload and select the new section.
+      window.dispatchEvent(new CustomEvent('kaizenpm:sections-changed', { detail: { projectId } }))
+    } catch (err) {
+      toast.fromError(err, 'Could not create the section.')
+    }
+    creatingSectionRef.current = false
+    setCreatingSection(false)
   }
 
   const toggleSelected = (taskId) => {
@@ -94,11 +137,11 @@ export default function KanbanBoard({ projectId, subProjectId }) {
   }
 
   const runBulk = async (action, value) => {
-    if (selectedIds.size === 0) return
+    if (selectedIds.size === 0 || bulkBusy) return
     setBulkBusy(true)
     try {
       await api.post(`/api/orgs/${currentOrg.id}/tasks/bulk`, {
-        task_ids: [...selectedIds],
+        task_ids: [...selectedIds].filter((id) => !isPending(id)),
         action,
         value: value ?? null
       })
@@ -106,6 +149,7 @@ export default function KanbanBoard({ projectId, subProjectId }) {
       await fetchTasks()
     } catch (err) {
       console.error('Bulk action failed:', err)
+      toast.fromError(err, 'That change could not be applied to the selected tasks.')
     }
     setBulkBusy(false)
   }
@@ -137,21 +181,22 @@ export default function KanbanBoard({ projectId, subProjectId }) {
 
   const openTask = tasks.find(t => t.id === openTaskId) || null
 
-  const TaskCard = ({ task }) => (
+  const renderCard = (task) => (
     <div
-      onClick={() => setOpenTaskId(task.id)}
+      onClick={() => !task._pending && setOpenTaskId(task.id)}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && setOpenTaskId(task.id)}
+      onKeyDown={(e) => e.key === 'Enter' && !task._pending && setOpenTaskId(task.id)}
       className={`bg-slate-800 border rounded-lg p-3 mb-2 cursor-pointer hover:border-brand-500/50 ${
         selectedIds.has(task.id) ? 'border-brand-500' : 'border-slate-700'
-      }`}
+      } ${task._pending ? 'opacity-70' : ''}`}
     >
       <div className="flex justify-between items-start gap-2">
         <input
           type="checkbox"
           checked={selectedIds.has(task.id)}
           onChange={() => toggleSelected(task.id)}
+          disabled={!!task._pending}
           onClick={(e) => e.stopPropagation()}
           aria-label={`Select ${task.title}`}
           className="mt-1 shrink-0 accent-brand-500"
@@ -172,6 +217,11 @@ export default function KanbanBoard({ projectId, subProjectId }) {
             }`}>
               {task.priority}
             </span>
+            {task._pending && (
+              <span className="flex items-center gap-1 text-xs text-amber-300">
+                <Clock size={12} /> Waiting to save
+              </span>
+            )}
             {task.comment_count > 0 && (
               <span className="flex items-center gap-1 text-xs text-slate-400">
                 <MessageSquare size={12} />
@@ -183,7 +233,8 @@ export default function KanbanBoard({ projectId, subProjectId }) {
         <button
           onClick={(e) => { e.stopPropagation(); deleteTask(task.id) }}
           aria-label={`Delete ${task.title}`}
-          className="p-1 hover:bg-red-500/20 rounded text-red-400 shrink-0"
+          disabled={!!task._pending}
+          className="p-1 hover:bg-red-500/20 rounded text-red-400 shrink-0 disabled:opacity-40"
         >
           <Trash2 size={14} />
         </button>
@@ -191,13 +242,13 @@ export default function KanbanBoard({ projectId, subProjectId }) {
     </div>
   )
 
-  const Column = ({ title, status, tasks }) => (
+  const renderColumn = (title, status, columnTasks) => (
     <div className="bg-slate-900/50 rounded-lg p-3 shrink-0 w-64 lg:w-auto lg:flex-1 min-h-96">
       <h3 className="font-semibold text-white mb-3 text-sm">{title}</h3>
       <div className="space-y-2">
-        {tasks.map(task => (
+        {columnTasks.map(task => (
           <div key={task.id} className="flex gap-1">
-            {status !== 'todo' && (
+            {status !== 'todo' && !task._pending && (
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -211,8 +262,8 @@ export default function KanbanBoard({ projectId, subProjectId }) {
                 <ChevronLeft size={14} />
               </button>
             )}
-            <TaskCard task={task} />
-            {status !== 'done' && (
+            {renderCard(task)}
+            {status !== 'done' && !task._pending && (
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -233,6 +284,21 @@ export default function KanbanBoard({ projectId, subProjectId }) {
   )
 
   if (!subProjectId) {
+    if (projectId) {
+      return (
+        <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-sm text-slate-300" data-testid="no-section">
+          <p>This project has no section yet. Tasks live inside sections, so add one to start adding tasks.</p>
+          <button
+            type="button"
+            onClick={createDefaultSection}
+            disabled={creatingSection}
+            className="rounded-lg bg-brand-500 px-4 py-2 font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            {creatingSection ? 'Creating…' : 'Create the "General" section'}
+          </button>
+        </div>
+      )
+    }
     return (
       <div className="text-slate-400 text-sm">
         Pick a project to see its tasks, or create one to get started.
@@ -249,13 +315,17 @@ export default function KanbanBoard({ projectId, subProjectId }) {
           onChange={(e) => setNewTask(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && createTask()}
           placeholder="Add new task..."
+          aria-label="New task title"
           className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500"
         />
         <button
+          type="button"
           onClick={createTask}
-          className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg flex items-center gap-2"
+          disabled={creating}
+          aria-label="Add task"
+          className="px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-60 text-white rounded-lg flex items-center gap-2"
         >
-          <Plus size={18} /> Add
+          <Plus size={18} /> {creating ? 'Adding…' : 'Add'}
         </button>
       </div>
 
@@ -305,10 +375,10 @@ export default function KanbanBoard({ projectId, subProjectId }) {
       </div>
 
       <div className="flex gap-3 overflow-x-auto pb-4 -mx-1 px-1">
-        <Column title="To Do" status="todo" tasks={columns.todo} />
-        <Column title="In Progress" status="in_progress" tasks={columns.in_progress} />
-        <Column title="Review" status="review" tasks={columns.review} />
-        <Column title="Done" status="done" tasks={columns.done} />
+        {renderColumn('To Do', 'todo', columns.todo)}
+        {renderColumn('In Progress', 'in_progress', columns.in_progress)}
+        {renderColumn('Review', 'review', columns.review)}
+        {renderColumn('Done', 'done', columns.done)}
       </div>
 
       {selectedIds.size > 0 && (

@@ -101,3 +101,67 @@ def test_non_admin_cannot_view_project_access(client):
 
     res = client.get(f"/api/orgs/{ctx['org_id']}/project-access", headers=auth(member_token))
     assert res.status_code == 403
+
+
+# --- an owner/admin of ONE organisation must have no power over ANOTHER -------------------------------------------------
+# The token's "role" describes the organisation the token was last scoped to. Routes that trusted it without checking the
+# caller's membership of the organisation named in the URL let the owner of any organisation manage every other one.
+
+def _victim_and_attacker(client):
+    victim = make_org_with_project(client, "victim-owner@test.com")
+    attacker = make_org_with_project(client, "attacker-owner@test.com")
+    return victim, attacker
+
+
+def _emails(client, org_id, token):
+    return [m["user"]["email"] for m in client.get(f"/api/orgs/{org_id}/members", headers=auth(token)).json()]
+
+
+def test_owner_of_another_org_cannot_add_members_here(client):
+    victim, attacker = _victim_and_attacker(client)
+    res = client.post(
+        f"/api/orgs/{victim['org_id']}/members",
+        json={"email": "attacker-owner@test.com", "role": "owner"},
+        headers=auth(attacker["token"]),
+    )
+    assert res.status_code == 403, res.text
+    assert "attacker-owner@test.com" not in _emails(client, victim["org_id"], victim["token"])
+
+
+def test_owner_of_another_org_cannot_remove_members_here(client):
+    victim, attacker = _victim_and_attacker(client)
+    member = _add_member(client, victim["org_id"], victim["token"], "innocent@test.com")
+    res = client.delete(f"/api/orgs/{victim['org_id']}/members/{member['id']}", headers=auth(attacker["token"]))
+    assert res.status_code in (403, 428), res.text
+    assert "innocent@test.com" in _emails(client, victim["org_id"], victim["token"])
+
+
+def test_owner_of_another_org_cannot_list_pending_invites_here(client):
+    victim, attacker = _victim_and_attacker(client)
+    res = client.get(f"/api/orgs/{victim['org_id']}/invites", headers=auth(attacker["token"]))
+    assert res.status_code == 403, res.text
+
+
+def test_an_invitation_cannot_be_accepted_by_someone_it_was_not_sent_to(client):
+    from datetime import datetime, timedelta
+
+    from database import get_db
+    from main import app
+    from models import InviteStatus, OrganizationInvite, User, UserRole
+
+    victim, attacker = _victim_and_attacker(client)
+    register(client, "intended@test.com")
+    db = next(app.dependency_overrides[get_db]())
+    inviter = db.query(User).filter(User.email == "victim-owner@test.com").first()
+    invite = OrganizationInvite(
+        organization_id=victim["org_id"], email="intended@test.com", role=UserRole.admin,
+        status=InviteStatus.pending, created_by=inviter.id, expires_at=datetime.utcnow() + timedelta(days=3),
+    )
+    db.add(invite)
+    db.commit()
+    invite_id = invite.id
+    db.close()
+
+    res = client.post(f"/api/orgs/{victim['org_id']}/invites/{invite_id}/accept", headers=auth(attacker["token"]))
+    assert res.status_code == 403, res.text
+    assert "attacker-owner@test.com" not in _emails(client, victim["org_id"], victim["token"])

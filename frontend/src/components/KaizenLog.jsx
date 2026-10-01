@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, Lightbulb } from 'lucide-react'
 import api from '../utils/api'
 import { useOrg } from '../context/OrgContext'
+import { useToast } from './Toast'
 
 const CATEGORIES = ['productivity', 'mindset', 'workflow', 'health', 'other']
 
 export default function KaizenLog() {
+  const toast = useToast()
   const { currentOrg } = useOrg()
   const [logs, setLogs] = useState([])
   const [title, setTitle] = useState('')
@@ -13,6 +15,7 @@ export default function KaizenLog() {
   const [solution, setSolution] = useState('')
   const [category, setCategory] = useState('productivity')
   const [loading, setLoading] = useState(false)
+  const savingRef = useRef(false)
 
   useEffect(() => {
     fetchLogs()
@@ -26,35 +29,50 @@ export default function KaizenLog() {
       setLogs(res.data)
     } catch (err) {
       console.error('Failed to fetch kaizen logs:', err)
+      toast.fromError(err, 'Could not load the kaizen log.')
     }
     setLoading(false)
   }
 
+  const resetForm = () => {
+    setTitle('')
+    setProblem('')
+    setSolution('')
+    setCategory('productivity')
+  }
+
   const createLog = async () => {
-    if (!title.trim() || !problem.trim() || !solution.trim()) return
+    if (savingRef.current) return
+    if (!title.trim() || !problem.trim() || !solution.trim()) {
+      toast.error('Please fill in the title, what the problem was, and what the solution is.')
+      return
+    }
+    savingRef.current = true
     try {
       const res = await api.post(`/api/orgs/${currentOrg.id}/kaizen`, {
-        title,
-        problem,
-        solution,
+        title: title.trim(),
+        problem: problem.trim(),
+        solution: solution.trim(),
         category
       })
-      setLogs([...logs, res.data])
-      setTitle('')
-      setProblem('')
-      setSolution('')
-      setCategory('productivity')
+      setLogs((cur) => [...cur, res.data])
+      resetForm()
     } catch (err) {
       console.error('Failed to create kaizen log:', err)
+      if (err.queued) resetForm() // saved on this device: do not let it be typed twice
+      toast.fromError(err, 'Could not save the entry.')
     }
+    savingRef.current = false
   }
 
   const deleteLog = async (logId) => {
     try {
       await api.delete(`/api/orgs/${currentOrg.id}/kaizen/${logId}`)
-      setLogs(logs.filter(l => l.id !== logId))
+      setLogs((cur) => cur.filter(l => l.id !== logId))
     } catch (err) {
       console.error('Failed to delete log:', err)
+      if (err.queued) setLogs((cur) => cur.filter(l => l.id !== logId))
+      toast.fromError(err, 'Could not delete the entry.')
     }
   }
 
@@ -117,6 +135,7 @@ export default function KaizenLog() {
               </div>
               <button
                 onClick={() => deleteLog(log.id)}
+                aria-label={`Delete ${log.title}`}
                 className="p-1 hover:bg-red-500/20 rounded text-red-400"
               >
                 <Trash2 size={16} />

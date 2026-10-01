@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Mail, Check, X } from 'lucide-react'
 import api from '../utils/api'
 import { useOrg } from '../context/OrgContext'
+import { errorMessage } from '../utils/errors'
 
 /**
  * Invitations waiting for the signed-in user.
@@ -38,7 +39,7 @@ export default function PendingInvites() {
       await load()
       if (action === 'accept') await fetchOrgs()
     } catch (err) {
-      setMessage(err?.response?.data?.detail || 'That did not work. Please try again.')
+      setMessage(errorMessage(err, 'That did not work. Please try again.'))
     }
     setBusy(null)
   }

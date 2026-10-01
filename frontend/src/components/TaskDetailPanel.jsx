@@ -4,6 +4,7 @@ import api from '../utils/api'
 import TaskComments from './TaskComments'
 import TaskDependencies from './TaskDependencies'
 import { TASK_STATUSES, TASK_PRIORITIES } from '../config'
+import { errorMessage } from '../utils/errors'
 
 const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' }
 
@@ -27,6 +28,13 @@ export default function TaskDetailPanel({ orgId, projectId, subProjectId, task, 
 
   useEffect(() => setTitle(task?.title || ''), [task?.id])
 
+  // Escape closes the drawer (it covers the page, so keyboard users need a way out that is not hunting for the X).
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onClose?.()
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   if (!task) return null
 
   const baseUrl = `/api/orgs/${orgId}/projects/${projectId}/tasks/${subProjectId}/${task.id}`
@@ -39,8 +47,13 @@ export default function TaskDetailPanel({ orgId, projectId, subProjectId, task, 
       onTaskUpdate?.(res.data)
       setSavedFlash(true)
       setTimeout(() => setSavedFlash(false), 1500)
-    } catch {
-      setError('Could not save that change. It will be sent when you are back online.')
+    } catch (err) {
+      // Only a change that really was parked on this device may promise to be sent later; other failures say what went wrong.
+      setError(
+        err?.queued
+          ? 'No connection: the change is saved on this device and will be sent when you are back online.'
+          : errorMessage(err, 'Could not save that change.')
+      )
     }
     setSaving(false)
   }
@@ -88,6 +101,7 @@ export default function TaskDetailPanel({ orgId, projectId, subProjectId, task, 
               <label className="block text-xs font-medium text-slate-400 mb-1">Status</label>
               <select
                 value={task.status}
+                aria-label="Status"
                 onChange={(e) => save({ status: e.target.value })}
                 className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-white text-sm"
               >
@@ -100,6 +114,7 @@ export default function TaskDetailPanel({ orgId, projectId, subProjectId, task, 
               <label className="block text-xs font-medium text-slate-400 mb-1">Priority</label>
               <select
                 value={task.priority}
+                aria-label="Priority"
                 onChange={(e) => save({ priority: e.target.value })}
                 className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-white text-sm capitalize"
               >
@@ -114,6 +129,7 @@ export default function TaskDetailPanel({ orgId, projectId, subProjectId, task, 
               <input
                 type="date"
                 value={toDateInput(task.start_date)}
+                aria-label="Start date"
                 onChange={(e) => save({ start_date: e.target.value ? `${e.target.value}T00:00:00` : null })}
                 className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-white text-sm"
               />
@@ -123,6 +139,7 @@ export default function TaskDetailPanel({ orgId, projectId, subProjectId, task, 
               <input
                 type="date"
                 value={toDateInput(task.due_date)}
+                aria-label="Due date"
                 onChange={(e) => save({ due_date: e.target.value ? `${e.target.value}T00:00:00` : null })}
                 className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-white text-sm"
               />
@@ -132,6 +149,7 @@ export default function TaskDetailPanel({ orgId, projectId, subProjectId, task, 
               <label className="block text-xs font-medium text-slate-400 mb-1">Assignee</label>
               <select
                 value={task.assignee_id ?? ''}
+                aria-label="Assignee"
                 onChange={(e) => save({ assignee_id: e.target.value ? Number(e.target.value) : null })}
                 className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-white text-sm"
               >
@@ -148,6 +166,7 @@ export default function TaskDetailPanel({ orgId, projectId, subProjectId, task, 
                 min={1}
                 max={13}
                 value={task.story_points || ''}
+                aria-label="Story points"
                 placeholder="—"
                 onChange={(e) => {
                   const v = e.target.value

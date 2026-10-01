@@ -5,6 +5,7 @@ import api from '../utils/api'
 import { useOrg } from '../context/OrgContext'
 import { useLocalization } from '../context/LocalizationContext'
 import TaskDetailPanel from './TaskDetailPanel'
+import { errorMessage } from '../utils/errors'
 
 const COLUMNS = [
   { status: 'todo', label: 'To Do' },
@@ -163,7 +164,7 @@ export default function SprintBoard() {
       setAddTaskId('')
       await Promise.all([loadSprintDetail(), refreshSprintsList()])
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not add that task.')
+      setError(errorMessage(err, 'Could not add that task.'))
     }
   }
 

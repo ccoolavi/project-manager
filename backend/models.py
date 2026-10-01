@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, JSON, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, JSON, UniqueConstraint, Enum as SQLEnum
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import relationship
 from database import Base
@@ -417,3 +417,22 @@ class ProjectMember(Base):
 
     project = relationship("Project")
     user = relationship("User", foreign_keys=[user_id])
+
+
+class IdempotencyKey(Base):
+    """The recorded answer to a write the client marked with an Idempotency-Key header.
+
+    A client that retries a write (an automatic retry after the server could not be reached, or an offline replay of a
+    request that actually did go through) gets the first answer back instead of creating a duplicate."""
+    __tablename__ = "idempotency_keys"
+    __table_args__ = (UniqueConstraint("user_id", "key", "method", "path", name="uq_idempotency_request"),)
+
+    id = Column(Integer, primary_key=True)
+    key = Column(String, index=True)
+    user_id = Column(Integer, index=True)
+    method = Column(String)
+    path = Column(String)
+    status_code = Column(Integer)
+    body = Column(Text)
+    content_type = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)

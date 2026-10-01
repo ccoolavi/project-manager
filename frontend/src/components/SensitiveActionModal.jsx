@@ -6,7 +6,13 @@ export default function SensitiveActionModal({ prompting, code, setCode, error, 
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4">
-      <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Confirm this action"
+        onKeyDown={(e) => e.key === 'Escape' && cancel()}
+        className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-sm"
+      >
         <div className="flex items-center gap-2 mb-1">
           <ShieldCheck size={18} className="text-brand-400" />
           <h3 className="text-white font-semibold">Confirm this action</h3>

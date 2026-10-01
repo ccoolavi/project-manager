@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { validate, registerSchema } from '../utils/validation'
+import { errorMessage } from '../utils/errors'
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -34,7 +35,7 @@ export default function RegisterPage() {
       await register(formData.name, formData.email, formData.password, formData.confirm_password)
       navigate('/dashboard')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Registration failed')
+      setError(errorMessage(err, 'Registration failed'))
     } finally {
       setLoading(false)
     }
@@ -55,8 +56,10 @@ export default function RegisterPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Name</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2" htmlFor="reg-name">Name</label>
               <input
+                  id="reg-name"
+                  autoComplete="name"
                 type="text"
                 name="name"
                 value={formData.name}
@@ -67,8 +70,10 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Email</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2" htmlFor="reg-email">Email</label>
               <input
+                  id="reg-email"
+                  autoComplete="email"
                 type="email"
                 name="email"
                 value={formData.email}
@@ -79,8 +84,10 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2" htmlFor="reg-password">Password</label>
               <input
+                  id="reg-password"
+                  autoComplete="new-password"
                 type="password"
                 name="password"
                 value={formData.password}
@@ -91,8 +98,10 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Confirm Password</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2" htmlFor="reg-confirm">Confirm Password</label>
               <input
+                  id="reg-confirm"
+                  autoComplete="new-password"
                 type="password"
                 name="confirm_password"
                 value={formData.confirm_password}

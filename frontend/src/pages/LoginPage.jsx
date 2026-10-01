@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { validate, loginSchema } from '../utils/validation'
+import { errorMessage } from '../utils/errors'
 
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState('')
@@ -35,7 +36,7 @@ export default function LoginPage() {
         navigate('/dashboard')
       }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Login failed')
+      setError(errorMessage(err, 'Login failed'))
     } finally {
       setLoading(false)
     }
@@ -53,7 +54,7 @@ export default function LoginPage() {
       await verifyLoginOtp(identifier, code.trim())
       navigate('/dashboard')
     } catch (err) {
-      setError(err.response?.data?.detail || 'That code did not work')
+      setError(errorMessage(err, 'That code did not work'))
     } finally {
       setLoading(false)
     }
@@ -75,8 +76,9 @@ export default function LoginPage() {
           {!awaitingOtp ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Email or phone</label>
+                <label className="block text-sm font-medium text-slate-300 mb-2" htmlFor="login-identifier">Email or phone</label>
                 <input
+                  id="login-identifier"
                   type="text"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
@@ -87,8 +89,9 @@ export default function LoginPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
+                <label className="block text-sm font-medium text-slate-300 mb-2" htmlFor="login-password">Password</label>
                 <input
+                  id="login-password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -114,12 +117,14 @@ export default function LoginPage() {
                 </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label htmlFor="login-code" className="block text-sm font-medium text-slate-300 mb-2">
                   Enter the 6-digit code
                 </label>
                 <input
+                  id="login-code"
                   type="text"
                   inputMode="numeric"
+                  autoComplete="one-time-code"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 tracking-widest text-center text-lg"

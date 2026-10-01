@@ -17,6 +17,15 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # A refresh token is only good for obtaining a new access token (POST /api/auth/token/refresh). It lives for days, so it
+    # must never double as a credential for ordinary requests.
+    if payload.get("type") == "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token type",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     user_id: str = payload.get("sub")
     if user_id is None:
         raise HTTPException(

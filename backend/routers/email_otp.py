@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -8,6 +8,7 @@ from middleware.auth import get_current_user
 from models import TrustedDevice, User
 from schemas import TokenResponse, UserResponse, VerifyActionOTP, VerifyLoginOTP
 from utils.action_otp import mark_verified
+from utils import login_guard
 from utils.email import send_email
 from utils.email_otp import (
     CODE_TTL_MINUTES,
@@ -45,7 +46,7 @@ def _build_tokens(user: User) -> TokenResponse:
 
 
 @router.post("/verify-login", response_model=TokenResponse)
-async def verify_login_otp(payload: VerifyLoginOTP, db: Session = Depends(get_db)):
+async def verify_login_otp(payload: VerifyLoginOTP, request: Request, db: Session = Depends(get_db)):
     """Complete a login that /api/auth/login held for a new-device challenge."""
     identifier = payload.identifier.strip()
     user = (
@@ -56,13 +57,19 @@ async def verify_login_otp(payload: VerifyLoginOTP, db: Session = Depends(get_db
     if not user:
         raise HTTPException(status_code=404, detail="Account not found")
 
+    keys = [f"code-login:{user.id}"]
+    address_key = f"addr:{login_guard.client_address(request)}"
+    login_guard.enforce(keys, address_key)           # a six-digit code must not be guessable at machine speed
+
     otp = latest_unverified(db, user.id, "login_device")
     if not otp:
         raise HTTPException(status_code=400, detail="Please request a new code by logging in again")
     if otp.expires_at < datetime.utcnow():
         raise HTTPException(status_code=400, detail="That code has expired. Please log in again.")
     if not verify_password(payload.code, otp.otp_hash):
+        login_guard.failed(keys, address_key)
         raise HTTPException(status_code=400, detail="That code is not correct")
+    login_guard.succeeded(keys)
 
     otp.verified_at = datetime.utcnow()
     if payload.device_id:
@@ -117,6 +124,7 @@ async def request_action_otp(
 @router.post("/verify-action")
 async def verify_action_otp(
     payload: VerifyActionOTP,
+    request: Request,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -126,13 +134,19 @@ async def verify_action_otp(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    keys = [f"code-action:{user.id}"]
+    address_key = f"addr:{login_guard.client_address(request)}"
+    login_guard.enforce(keys, address_key)
+
     otp = latest_unverified(db, user.id, "sensitive_action")
     if not otp:
         raise HTTPException(status_code=400, detail="Please request a new code")
     if otp.expires_at < datetime.utcnow():
         raise HTTPException(status_code=400, detail="That code has expired")
     if not verify_password(payload.code, otp.otp_hash):
+        login_guard.failed(keys, address_key)
         raise HTTPException(status_code=400, detail="That code is not correct")
+    login_guard.succeeded(keys)
 
     otp.verified_at = datetime.utcnow()
     db.commit()

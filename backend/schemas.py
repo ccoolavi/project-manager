@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from datetime import datetime
 from typing import Optional, List
 from models import UserRole, TaskStatus, TaskPriority, ProjectStatus, InviteStatus, ProjectRole
@@ -29,6 +29,9 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -188,10 +191,19 @@ class TaskResponse(BaseModel):
         from_attributes = True
 
 # Habit Schemas
+def _not_blank(value: str) -> str:
+    value = (value or "").strip()
+    if not value:
+        raise ValueError("cannot be empty")
+    return value
+
+
 class HabitCreate(BaseModel):
     title: str
     category: Optional[str] = None
-    target_days: int = 7
+    target_days: int = Field(default=7, ge=1, le=7)  # days per week
+
+    _title_not_blank = field_validator("title")(_not_blank)
 
 class HabitUpdate(BaseModel):
     title: Optional[str] = None
@@ -216,6 +228,8 @@ class KaizenLogCreate(BaseModel):
     problem: Optional[str] = None
     solution: Optional[str] = None
     category: Optional[str] = None
+
+    _title_not_blank = field_validator("title")(_not_blank)
 
 class KaizenLogUpdate(BaseModel):
     title: Optional[str] = None

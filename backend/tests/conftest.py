@@ -13,6 +13,16 @@ from database import Base, get_db  # noqa: E402
 from main import app  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _fresh_login_guard():
+    """The sign-in counters live in module-level memory; without this, failures in one test would leak into the next."""
+    from utils import login_guard
+
+    login_guard.reset_all()
+    yield
+    login_guard.reset_all()
+
+
 @pytest.fixture()
 def client():
     """A TestClient backed by a throwaway SQLite file, isolated per test."""

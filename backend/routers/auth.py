@@ -4,7 +4,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 
 from database import get_db
-from schemas import UserLogin, UserRegister, TokenResponse, UserResponse
+from schemas import UserLogin, UserRegister, TokenResponse, UserResponse, RefreshRequest
 from models import TrustedDevice, User
 from utils.security import (
     hash_password, verify_password, create_access_token,
@@ -14,6 +14,7 @@ from utils.email import send_email
 from utils.email_otp import CODE_TTL_MINUTES, is_rate_limited, issue_code
 from config import settings
 from middleware.auth import get_current_user
+from utils import login_guard
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -88,16 +89,22 @@ async def login(
     email challenge would make automation impossible rather than more secure.
     """
     identifier = credentials.identifier.strip()
+    account_keys = [f"login:{identifier.lower()}"]
+    address_key = f"addr:{login_guard.client_address(request)}"
+    login_guard.enforce(account_keys, address_key)          # refuse BEFORE checking: a right guess during a lockout must not work either
+
     user = (
         db.query(User)
         .filter((User.email == identifier) | (User.phone == identifier))
         .first()
     )
     if not user or not verify_password(credentials.password, user.password_hash):
+        login_guard.failed(account_keys, address_key)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email/phone or password"
         )
+    login_guard.succeeded(account_keys)
 
     if not user.is_active:
         raise HTTPException(
@@ -237,6 +244,45 @@ async def refresh_token(
         refresh_token=refresh_token_new,
         user=UserResponse.from_orm(user)
     )
+
+@router.post("/token/refresh", response_model=TokenResponse)
+async def renew_session(body: RefreshRequest, db: Session = Depends(get_db)):
+    """Trade a still-valid REFRESH token for a fresh access token (and a new refresh token).
+
+    Access tokens last only minutes, so without this the person would be signed out every half hour. Only a token that
+    was issued as a refresh token is accepted here, and (see middleware/auth.py) a refresh token is accepted nowhere else.
+    The new token describes the organisation the old one did, re-checked against the person's CURRENT membership, so a
+    role change or removal takes effect at the next renewal.
+    """
+    payload = decode_token(body.refresh_token)
+    if not payload or payload.get("type") != "refresh" or payload.get("sub") is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired session")
+
+    user = db.query(User).filter(User.id == int(payload["sub"])).first()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired session")
+
+    membership = None
+    if payload.get("org_id") is not None:
+        membership = next((m for m in user.memberships if m.organization_id == payload["org_id"]), None)
+    if membership is None and user.memberships:
+        membership = user.memberships[0]
+
+    token_data = {"sub": str(user.id), "email": user.email}
+    if membership:
+        role = membership.role.value
+        token_data.update({
+            "org_id": membership.organization_id,
+            "role": role,
+            "permissions": get_permissions_for_role(role),
+        })
+
+    return TokenResponse(
+        access_token=create_access_token(token_data),
+        refresh_token=create_refresh_token(token_data),
+        user=UserResponse.from_orm(user),
+    )
+
 
 @router.post("/logout")
 async def logout(current_user: dict = Depends(get_current_user)):

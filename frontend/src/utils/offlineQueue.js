@@ -44,10 +44,20 @@ async function withStore(mode, fn) {
   })
 }
 
+/** The signed-in person's id, so a parked change is only ever sent by the person who made it. */
+function currentUserId() {
+  try {
+    return JSON.parse(localStorage.getItem('user') || 'null')?.id ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function enqueue(entry) {
   return withStore('readwrite', (store) =>
     store.add({
       ...entry,
+      userId: currentUserId(),
       idempotencyKey:
         entry.idempotencyKey ||
         `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
@@ -56,8 +66,15 @@ export async function enqueue(entry) {
   )
 }
 
+/**
+ * What is waiting for the person signed in now. Changes parked by someone else on this device stay parked until that person
+ * signs in again: replaying them under a different account would attribute them to the wrong person (or fail).
+ * Entries from before owners were recorded have no userId and are treated as the current person's, as they always were.
+ */
 export async function listQueue() {
-  return withStore('readonly', (store) => store.getAll())
+  const all = await withStore('readonly', (store) => store.getAll())
+  const me = currentUserId()
+  return all.filter((item) => item.userId == null || item.userId === me)
 }
 
 export async function removeFromQueue(id) {

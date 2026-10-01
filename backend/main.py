@@ -10,6 +10,7 @@ logger = logging.getLogger("kaizenpm")
 from sqlalchemy import text
 
 from config import settings
+from middleware.idempotency import idempotency_middleware
 from database import engine, Base
 from routers import auth, organizations, projects, tasks, habits, kaizen, time, otp, ikigai, invites, comments, search, email_otp, notifications, analytics, sprints, me
 
@@ -40,6 +41,9 @@ app = FastAPI(
     version=settings.app_version,
     description="KaizenPM - Multi-tenant Project & Habit Management API"
 )
+
+# Registered BEFORE the CORS middleware so CORS stays outermost and its headers are also added to replayed answers.
+app.middleware("http")(idempotency_middleware)
 
 # CORS middleware
 app.add_middleware(

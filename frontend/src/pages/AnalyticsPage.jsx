@@ -29,6 +29,7 @@ export default function AnalyticsPage() {
   const [tasks, setTasks] = useState(null)
   const [time, setTime] = useState([])
   const [velocity, setVelocity] = useState([])
+  const [habits, setHabits] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -40,13 +41,16 @@ export default function AnalyticsPage() {
     setLoading(true)
     setError('')
     try {
-      const [t, tm, v] = await Promise.all([
+      const [t, tm, v, h] = await Promise.all([
         api.get(`/api/orgs/${currentOrg.id}/analytics/tasks`),
         api.get(`/api/orgs/${currentOrg.id}/analytics/time`),
-        api.get(`/api/orgs/${currentOrg.id}/analytics/velocity`)
+        api.get(`/api/orgs/${currentOrg.id}/analytics/velocity`),
+        // The habit figure is a nicety: if it cannot be loaded the rest of the page should still show.
+        api.get(`/api/orgs/${currentOrg.id}/analytics/habits`).catch(() => ({ data: null }))
       ])
       setTasks(t.data)
       setTime(tm.data)
+      setHabits(h.data)
       setVelocity(v.data.map((w) => ({ ...w, label: formatDate(w.week_start) })))
     } catch {
       setError('Could not load analytics.')
@@ -82,8 +86,14 @@ export default function AnalyticsPage() {
         />
         <SummaryCard
           label="Habit consistency"
-          value={`${Math.round((habits?.completion_rate_30d || 0) * 100)}%`}
-          sub="last 30 days"
+          value={habits ? `${Math.round((habits.completion_rate_30d || 0) * 100)}%` : '—'}
+          sub={
+            !habits
+              ? 'not available right now'
+              : habits.habit_count
+                ? `your ${habits.habit_count} habit${habits.habit_count === 1 ? '' : 's'} · last 30 days`
+                : 'add a habit to start tracking'
+          }
         />
         <SummaryCard
           label="Time logged"
