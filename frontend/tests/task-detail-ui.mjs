@@ -43,8 +43,8 @@ await titleInput.blur()
 await p.waitForTimeout(2000)
 
 // Set story points
-await p.locator('input[type="number"]').fill('8')
-await p.locator('input[type="number"]').blur()
+await p.locator('[aria-label="Story points"]').fill('8')
+await p.locator('[aria-label="Story points"]').blur()
 await p.waitForTimeout(1500)
 
 // Set due date
@@ -68,7 +68,7 @@ ok(/Renamed via panel/.test(boardText), 'renamed title persisted to the server (
 await p.getByText('Renamed via panel').click()
 await p.waitForTimeout(1500)
 await p.screenshot({ path: `${SHOTS}/td-3-reopened.png` })
-const spValue = await p.locator('input[type="number"]').inputValue()
+const spValue = await p.locator('[aria-label="Story points"]').inputValue()
 ok(spValue === '8', `story points persisted (got "${spValue}")`)
 const dueValue = await p.locator('input[type="date"]').nth(1).inputValue()
 ok(dueValue === '2026-09-15', `due date persisted (got "${dueValue}")`)

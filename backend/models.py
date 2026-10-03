@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, JSON, UniqueConstraint, Enum as SQLEnum
+from sqlalchemy import Column, Integer, Float, String, Boolean, DateTime, ForeignKey, Text, JSON, UniqueConstraint, Enum as SQLEnum
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import relationship
 from database import Base
@@ -141,6 +141,8 @@ class Task(Base):
     due_date = Column(DateTime, nullable=True)
     start_date = Column(DateTime, nullable=True)
     story_points = Column(Integer, default=0)
+    # Optional effort guess in hours; feeds the cross-org workload view.
+    estimate_hours = Column(Float, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

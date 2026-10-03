@@ -83,11 +83,21 @@ class MyTimelineTask(BaseModel):
     due_date: Optional[datetime] = None
     start_date: Optional[datetime] = None
     story_points: Optional[int] = None
+    estimate_hours: Optional[float] = None
     organization_id: int
     organization_name: str
     project_id: int
     project_name: str
     sub_project_id: int
+    # Workload figures from utils/workload.py.
+    effort_hours: float = 0
+    effort_source: str = "default"      # estimate | points | default
+    remaining_hours: float = 0
+    scheduled_start: Optional[str] = None
+    scheduled_end: Optional[str] = None
+    overdue: bool = False
+    blocked: bool = False
+    blocker_due: Optional[str] = None
 
 class MyTimelineSprint(BaseModel):
     id: int
@@ -100,6 +110,12 @@ class MyTimelineSprint(BaseModel):
 class MyTimelineResponse(BaseModel):
     tasks: List[MyTimelineTask]
     sprints: List[MyTimelineSprint]
+    # Added with the planning view; older clients simply ignore them.
+    days: List[dict] = []
+    warnings: List[dict] = []
+    unscheduled_task_ids: List[int] = []
+    summary: dict = {}
+    window: dict = {}
 
 class ControlledProject(BaseModel):
     id: int
@@ -159,6 +175,7 @@ class TaskCreate(BaseModel):
     due_date: Optional[datetime] = None
     start_date: Optional[datetime] = None
     story_points: Optional[int] = Field(default=None, ge=1, le=13)
+    estimate_hours: Optional[float] = Field(default=None, gt=0, le=200)
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -169,6 +186,7 @@ class TaskUpdate(BaseModel):
     due_date: Optional[datetime] = None
     start_date: Optional[datetime] = None
     story_points: Optional[int] = Field(default=None, ge=1, le=13)
+    estimate_hours: Optional[float] = Field(default=None, gt=0, le=200)
 
 class TaskResponse(BaseModel):
     id: int
@@ -181,6 +199,7 @@ class TaskResponse(BaseModel):
     due_date: Optional[datetime] = None
     start_date: Optional[datetime] = None
     story_points: Optional[int] = None
+    estimate_hours: Optional[float] = None
     created_by: int
     created_at: datetime
     comment_count: int = 0

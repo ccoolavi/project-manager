@@ -231,6 +231,8 @@ await T('F. search and My Timeline', page, async () => {
   await page.getByLabel('Close', { exact: true }).click().catch(() => {}); await page.waitForTimeout(500);
   await tab('My Timeline').click(); await page.waitForTimeout(1500);
   ok((await page.getByText(N('Findable task')).count()) >= 1, 'My Timeline lists the task assigned to me with a due date');
+  // My Timeline now opens on the planning timeline; the month calendar is one click away.
+  await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Month', exact: true }).click(); await page.waitForTimeout(800);
   const monthLabel = async () => (await page.locator('main').innerText()).match(/(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}/)?.[0];
   const m0 = await monthLabel();
   await page.getByRole('button', { name: 'Next month' }).click(); await page.waitForTimeout(500);

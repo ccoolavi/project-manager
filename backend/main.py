@@ -28,6 +28,7 @@ with engine.connect() as conn:
     for stmt in [
         "ALTER TABLE tasks ADD COLUMN story_points INTEGER DEFAULT 0",
         "ALTER TABLE tasks ADD COLUMN start_date TIMESTAMP",
+        "ALTER TABLE tasks ADD COLUMN estimate_hours REAL",
     ]:
         try:
             conn.execute(text(stmt))

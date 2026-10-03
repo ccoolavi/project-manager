@@ -8,9 +8,15 @@ are blocked and counted (the summary prints the count; it must be 0).
 |---|---|
 | `pm_t1_addtask.mjs` | add-task in every situation: normal, double-click, offline queue and replay, API address change, no section, viewer role, selection memory |
 | `pm_t2_workflow.mjs` | sign-in/out, organisations, projects, habits, kaizen, time, analytics, search, My Timeline, people (add/role/remove with the emailed-code step), invitations |
+| `pm_t4_my_timeline.mjs` | My Timeline across organisations: clash headline and load strip, lanes, own-tasks-only, hiding organisations, estimate edit, working week, agenda/month views, offline notice, phone width |
 | `pm_t3_pwa_mobile_crawl.mjs` | manifest/icons/service worker, offline reload, logout clears cached data, no password stored offline, silent session renewal, phone width on every screen, a crawler pressing every non-destructive control |
 | `legacy/*.mjs` | the older per-feature scripts, adapted to run against the isolated stack (`PM_BASE=http://127.0.0.1:15173/project-manager/`) |
 
 Run: `./start_isolated_stack.sh`, then e.g. `PM_SITE=/tmp/kaizenpm-isolated/site/project-manager PM_DB=/tmp/kaizenpm-isolated/test.db node pm_t2_workflow.mjs`.
 Mail is switched off in the stack: the tests put a known code into the one-time-code table (same bcrypt hashing as the server) and type it into the dialog, exactly as a person would.
 The machine has ONE CPU: do not run heavy jobs at the same time, or fixed waits can fail for the wrong reason.
+
+Notes learned while writing `pm_t4`:
+- The app's service worker answers `/api/` reads itself (network-first, 24 h cache), so `page.route(...abort)` never sees them; use `ctx.setOffline(true)` to simulate a dead network.
+- A new device asks for an emailed code at sign-in and this stack cannot send mail: `pm_t4` signs in through the API and writes the saved session into the browser's storage, then **reloads** (the app reads the session only when it starts).
+- `pm_t3` has one failing check ("the app says it is offline") that fails identically on the code before the My Timeline work.

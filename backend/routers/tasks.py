@@ -44,6 +44,7 @@ async def create_task(
         due_date=task_data.due_date,
         start_date=task_data.start_date,
         story_points=task_data.story_points or 0,
+        estimate_hours=task_data.estimate_hours,
         created_by=user_id,
     )
     db.add(new_task)
@@ -132,6 +133,8 @@ async def update_task(
         task.start_date = task_data.start_date
     if task_data.story_points is not None:
         task.story_points = task_data.story_points
+    if task_data.estimate_hours is not None:
+        task.estimate_hours = task_data.estimate_hours
 
     db.commit()
     db.refresh(task)

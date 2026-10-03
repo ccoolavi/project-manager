@@ -177,6 +177,28 @@ export default function TaskDetailPanel({ orgId, projectId, subProjectId, task, 
                 className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-white text-sm"
               />
             </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Estimate (hours)</label>
+              {/* Saved when the field loses focus or Enter is pressed, so typing "2.5" does not save "2" first. */}
+              <input
+                type="number"
+                min={0.5}
+                max={200}
+                step={0.5}
+                key={`${task.id}:${task.estimate_hours ?? ''}`}
+                defaultValue={task.estimate_hours ?? ''}
+                aria-label="Estimate (hours)"
+                placeholder="—"
+                onBlur={(e) => {
+                  const v = e.target.value
+                  if (v === '') return
+                  const n = Math.min(200, Math.max(0.5, Number(v)))
+                  if (Number.isFinite(n) && n !== task.estimate_hours) save({ estimate_hours: n })
+                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-white text-sm"
+              />
+            </div>
           </div>
 
           {task.description && (

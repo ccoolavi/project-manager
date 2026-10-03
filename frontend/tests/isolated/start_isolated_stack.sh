@@ -15,6 +15,9 @@ for PORT in 18090 18091; do
       SMTP_SERVER= SMTP_USER= SMTP_PASSWORD= WHATSAPP_BRIDGE_URL= ALLOWED_ORIGINS=http://127.0.0.1:15173 \
       nohup ./venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port $PORT --workers 1 > "$WORK/api-$PORT.log" 2>&1 &
     echo $! > "$WORK/api-$PORT.pid" )
+  # Two instances creating the tables of an EMPTY database at the same moment race ("table users already exists");
+  # let the first one finish creating them before the second starts.
+  sleep 6
 done
 ( cd "$ROOT/frontend" && VITE_API_URL=http://127.0.0.1:18090 npx vite build --outDir "$WORK/dist" --emptyOutDir >/dev/null )
 rm -rf "$WORK/site"; mkdir -p "$WORK/site/project-manager"; cp -r "$WORK/dist/." "$WORK/site/project-manager/"
