@@ -1,4 +1,4 @@
 {
-  "apiUrl": "https://poll-senator-sheffield-trailers.trycloudflare.com",
+  "apiUrl": "https://retrieve-permanent-knife-outlined.trycloudflare.com",
   "note": "Runtime API endpoint. Edit this file and redeploy it alone when the tunnel rotates - no client rebuild required."
 }
